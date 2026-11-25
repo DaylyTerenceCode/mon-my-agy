@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE · THROWAWAY
+  Four variants of the Mon-My-Agy auxiliary side pane, switchable via ?variant=A|B|C|D
+  and the floating bottom bar, mounted inside a mock Antigravity side pane.
+  All data is synthetic. No persistence.
+-->
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mon-My-Agy · UI Prototype v2</title>
+<script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+<style>
+  .tnum { font-variant-numeric: tabular-nums; }
+  .ease { transition: all .35s cubic-bezier(.2,.8,.2,1); }
+  @keyframes pulse-dot { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+  .pulse { animation: pulse-dot 1.2s ease-in-out infinite; }
+  .hatch {
+    background-image: repeating-linear-gradient(135deg, transparent 0 5px,
+      color-mix(in srgb, var(--muted-foreground) 25%, transparent) 5px 6px);
+  }
+  .pane-scroll::-webkit-scrollbar { width: 6px; }
+  .pane-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  summary::-webkit-details-marker { display: none; }
+</style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased m-0 p-0">
+
+<div class="min-h-[100vh] flex flex-col items-center px-4 pt-5 pb-28">
+  <!-- Caption -->
+  <div class="w-full flex items-center justify-between gap-3 text-xs text-[var(--muted-foreground)] mb-2" id="caption">
+    <span><b class="text-[var(--foreground)]">PROTOTYPE</b> · 示例數據 · 模擬右側輔助面板</span>
+    <span class="flex items-center gap-1">
+      面板寬度
+      <button data-w="360" class="wbtn px-1.5 py-0.5 rounded border border-[var(--border)]">360</button>
+      <button data-w="440" class="wbtn px-1.5 py-0.5 rounded border border-[var(--border)]">440</button>
+      <button data-w="560" class="wbtn px-1.5 py-0.5 rounded border border-[var(--border)]">560</button>
+    </span>
+  </div>
+
+  <!-- Mock Antigravity auxiliary side pane -->
+  <div id="pane" class="ease rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden flex flex-col shadow-sm" style="width:440px;height:700px">
+    <div class="flex items-center gap-1 px-2 h-9 border-b border-[var(--card-border)] text-xs shrink-0">
+      <span class="px-2 py-1 rounded text-[var(--muted-foreground)]">Review</span>
+      <span class="px-2 py-1 rounded text-[var(--muted-foreground)]">Files</span>
+      <span class="px-2 py-1 rounded bg-[var(--secondary)] text-[var(--foreground)] font-medium flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full" id="tab-dot"></span>Mon-My-Agy <span class="text-[var(--muted-foreground)]">×</span>
+      </span>
+    </div>
+    <div id="root" class="pane-scroll flex-1 overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- Floating prototype switcher (not part of the design) -->
+<div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-2 py-1.5 rounded-full shadow-lg text-xs"
+     style="background:var(--foreground);color:var(--background)">
+  <button id="prev" class="w-7 h-7 rounded-full hover:opacity-70" title="上一個 (←)">‹</button>
+  <span id="vlabel" class="font-semibold min-w-[132px] text-center"></span>
+  <button id="next" class="w-7 h-7 rounded-full hover:opacity-70" title="下一個 (→)">›</button>
+  <span class="w-px h-4 opacity-30" style="background:var(--background)"></span>
+  <span id="scen" class="flex items-center gap-1"></span>
+  <span class="w-px h-4 opacity-30" style="background:var(--background)"></span>
+  <label class="flex items-center gap-1 pr-2 cursor-pointer select-none">
+    <input type="checkbox" id="running" /> 執行中
+  </label>
+</div>
+
+<script>
+/* ---------------- synthetic data ---------------- */
+function rng(seed){ let s = seed; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
+function hhmm(min){ const h = Math.floor(min/60)%24, m = min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+function genTurns(n, finalUsage, seed, startMin){
+  const r = rng(seed), out = []; let prev = 0;
+  for (let i = 0; i < n; i++){
+    let target = Math.round(finalUsage * Math.pow((i+1)/n, 0.85) * (0.96 + r()*0.08));
+    if (i === n-1) target = finalUsage;
+    if (target <= prev) target = prev + 900;
+    const output = Math.round(350 + r()*2600);
+    const cache  = i === 0 ? Math.round(target*0.55) : Math.round(prev*(0.9 + r()*0.08));
+    const input  = Math.max(250, target - cache - output);
+    const calls  = 2 + Math.floor(r()*5);
+    out.push({ idx:i+1, time:hhmm(startMin + i*4 + Math.floor(r()*3)), cache, input, output, usage:cache+input+output, calls });
+    prev = cache + input + output;
+  }
+  return out;
+}
+const CONVS = ['Antigravity Context Usage Plugin','Matt Pocock Skills Setup','GitHub Skills Search'];
+const SCEN = {
+  normal:   { label:'正常',   model:'claude-opus-5.5',        limit:200000, turns:genTurns(7,  43600, 7,  932) },
+  warning:  { label:'預警',   model:'gemini-4-neon-medium',   limit:200000, turns:genTurns(14,152400, 11, 905) },
+  critical: { label:'危險',   model:'gemini-4-neon-medium',   limit:200000, turns:genTurns(22,182400, 23, 880) },
+  unknown:  { label:'未知模型', model:'custom-experimental-v9', limit:null,   turns:genTurns(5,  43580, 5,  945) },
+};
+
+/* ---------------- state ---------------- */
+const VARIANTS = [
+  { key:'A', name:'儀表盤 Gauge' },
+  { key:'B', name:'回合賬本 Ledger' },
+  { key:'C', name:'容量艙 Capacity' },
+  { key:'D', name:'一眼 Glance' },
+  { key:'E', name:'組合 A+D' },
+];
+const qs = new URLSearchParams(location.search);
+const state = {
+  variant: VARIANTS.some(v => v.key === qs.get('variant')) ? qs.get('variant') : 'E',
+  scenario: 'normal', running: false, compact: 'idle', conv: 0,
+  expanded: new Set(), dOpen: { breakdown:true, trend:false, total:false, eTrend:true, eTotal:true },
+};
+
+/* ---------------- helpers ---------------- */
+const fmtK = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n);
+const fmtN = n => n.toLocaleString('en-US');
+const mix  = (c, p) => `color-mix(in srgb, ${c} ${p}%, transparent)`;
+const C_CACHE = 'var(--chart-1)', C_INPUT = 'var(--chart-2)', C_OUTPUT = 'var(--chart-3)';
+
+function derive(){
+  const sc = SCEN[state.scenario], t = sc.turns, last = t[t.length-1], prev = t[t.length-2];
+  const usage = last.usage, limit = sc.limit;
+  const pct = limit ? usage/limit*100 : null;
+  const recent = t.slice(-4);
+  const growth = recent.length > 1 ? (recent[recent.length-1].usage - recent[0].usage)/(recent.length-1) : usage;
+  const toWarn = limit && pct < 85 ? Math.max(1, Math.ceil((limit*0.85 - usage)/growth)) : null;
+  let level;
+  if (!limit)        level = { key:'unknown', color:'var(--muted-foreground)', label:'上限未知', hint:'未收錄此模型的上下文上限，僅顯示絕對 Token 數。可在 config.json 補充映射。' };
+  else if (pct >= 85) level = { key:'crit', color:'var(--error)',   label:'危險', hint:'已超過 85%，建議立即壓縮，以免觸發截斷或回答質量下降。' };
+  else if (pct >= 70) level = { key:'warn', color:'var(--warning)', label:'預警', hint:'已超過 70%，完成當前步驟後可考慮壓縮。' };
+  else                level = { key:'ok',   color:'var(--success)', label:'健康', hint:'上下文餘量充足。' };
+  return {
+    sc, t, last, usage, limit, pct, level, growth, toWarn,
+    remaining: limit ? limit - usage : null,
+    delta: prev ? usage - prev.usage : usage,
+    hit: last.cache/(last.cache+last.input)*100,
+    cumulative: t.reduce((s,x) => s + x.usage*x.calls*0.92, 0),
+    calls: t.reduce((s,x) => s + x.calls, 0),
+    scaleMax: limit || Math.max(...t.map(x => x.usage))*1.25,
+  };
+}
+const pctText = d => d.limit ? d.pct.toFixed(1)+'%' : fmtK(d.usage);
+
+function convSelect(cls=''){
+  return `<select data-act="conv" class="${cls} bg-transparent border border-[var(--border)] rounded px-1.5 py-1 text-xs text-[var(--foreground)] min-w-0 truncate focus:outline-none">
+    ${CONVS.map((c,i) => `<option value="${i}" ${i===state.conv?'selected':''}>${i===0?'跟隨 · ':'釘選 · '}${c}</option>`).join('')}
+  </select>`;
+}
+function snapshot(d){
+  return state.running
+    ? `<span class="inline-flex items-center gap-1.5 text-[var(--warning)]"><span class="w-1.5 h-1.5 rounded-full pulse" style="background:var(--warning)"></span>執行中 · 數據截至 ${d.last.time} Stop</span>`
+    : `<span class="inline-flex items-center gap-1.5 text-[var(--muted-foreground)]"><span class="w-1.5 h-1.5 rounded-full" style="background:var(--success)"></span>Stop 快照 · ${d.last.time}</span>`;
+}
+function stackBar(row, max, h='h-2'){
+  const w = v => (v/max*100).toFixed(2)+'%';
+  return `<div class="w-full ${h} rounded-full bg-[var(--secondary)] overflow-hidden flex">
+    <div class="ease" style="width:${w(row.cache)};background:${C_CACHE}"></div>
+    <div class="ease" style="width:${w(row.input)};background:${C_INPUT}"></div>
+    <div class="ease" style="width:${w(row.output)};background:${C_OUTPUT}"></div></div>`;
+}
+function thresholdMarks(d){
+  if (!d.limit) return '';
+  return [70,85].map(p => `<span class="absolute top-[-3px] bottom-[-3px] w-px" style="left:${p}%;background:var(--foreground);opacity:.35"></span>`).join('');
+}
+function compactBlock(d, prominent){
+  if (state.compact === 'sent')
+    return `<div class="text-xs text-[var(--success)]">✓ 已模擬 app.sendMessage('/compact')。新 Stop 到達後面板會更新。</div>`;
+  if (state.compact === 'confirm')
+    return `<div class="rounded-md p-2.5 space-y-2 text-xs" style="background:${mix('var(--warning)',12)};border:1px solid ${mix('var(--warning)',45)}">
+      <div>向當前對話發送 <code class="font-mono px-1 rounded bg-[var(--secondary)]">/compact</code>？壓縮後早期細節將被摘要替代。</div>
+      <div class="flex gap-2">
+        <button data-act="compact-yes" class="px-3 py-1 rounded font-medium" style="background:var(--primary);color:var(--primary-foreground)">確認發送</button>
+        <button data-act="compact-no" class="px-3 py-1 rounded border border-[var(--border)] text-[var(--muted-foreground)]">取消</button>
+      </div></div>`;
+  if (state.running)
+    return `<button disabled class="w-full text-xs px-3 py-2 rounded-md border border-dashed border-[var(--border)] text-[var(--muted-foreground)] cursor-not-allowed">Agent 執行中 · 完成後可壓縮</button>`;
+  const k = d.level.key;
+  const style = k === 'crit' ? `background:var(--error);color:var(--primary-foreground);border-color:transparent`
+              : k === 'warn' ? `background:${mix('var(--warning)',16)};color:var(--foreground);border-color:${mix('var(--warning)',55)}`
+              : `background:transparent;color:var(--muted-foreground)`;
+  return `<button data-act="compact-ask" class="${prominent?'w-full py-2':'py-1.5'} text-xs font-medium px-3 rounded-md border border-[var(--border)] hover:opacity-90" style="${style}">壓縮上下文 /compact</button>`;
+}
+function legendRow(color, label, val, share){
+  return `<div class="flex items-center gap-2 text-xs">
+    <span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${color}"></span>
+    <span class="text-[var(--muted-foreground)] flex-1">${label}</span>
+    <span class="font-mono tnum font-medium">${fmtN(val)}</span>
+    <span class="font-mono tnum text-[var(--muted-foreground)] w-11 text-right">${share.toFixed(1)}%</span></div>`;
+}
+
+/* ---------------- Variant A: Gauge dashboard ---------------- */
+function VariantA(d){
+  const R = 80, L = Math.PI*R, p = d.limit ? Math.min(1, d.pct/100) : 0.0;
+  const tick = q => { const a = Math.PI*(1-q); const x1=100+(R-11)*Math.cos(a), y1=100-(R-11)*Math.sin(a), x2=100+(R+11)*Math.cos(a), y2=100-(R+11)*Math.sin(a);
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--foreground)" stroke-opacity=".4" stroke-width="1.5"/>`; };
+  const pts = d.t.map((x,i) => [i/(d.t.length-1||1)*300, 60 - x.usage/d.scaleMax*56]);
+  const line = pts.map(p => p.join(',')).join(' ');
+  const th = q => d.limit ? `<line x1="0" x2="300" y1="${60-q*56}" y2="${60-q*56}" stroke="var(--foreground)" stroke-opacity=".25" stroke-dasharray="3 3"/>` : '';
+  return `
+  <div class="p-4 space-y-4">
+    <div class="flex items-center justify-between gap-2">
+      ${convSelect('flex-1')}
+      <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)] truncate max-w-[45%]">${d.sc.model}</span>
+    </div>
+
+    <div class="rounded-lg border border-[var(--card-border)] p-3">
+      <svg viewBox="0 0 200 112" class="w-full max-w-[260px] mx-auto block">
+        <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--secondary)" stroke-width="14" stroke-linecap="round"/>
+        <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="${d.level.color}" stroke-width="14" stroke-linecap="round"
+              stroke-dasharray="${L}" stroke-dashoffset="${L*(1-p)}" class="ease" ${d.limit?'':'stroke-opacity="0"'}/>
+        ${d.limit ? tick(.7)+tick(.85) : ''}
+        <text x="100" y="82" text-anchor="middle" font-size="26" font-weight="700" fill="var(--foreground)" font-family="ui-monospace,monospace">${pctText(d)}</text>
+        <text x="100" y="100" text-anchor="middle" font-size="10" fill="var(--muted-foreground)">${d.limit ? fmtK(d.usage)+' / '+fmtK(d.limit) : 'tokens · 上限未知'}</text>
+      </svg>
+      <div class="flex items-center justify-between text-xs mt-1">
+        <span class="font-medium" style="color:${d.level.color}">● ${d.level.label}</span>
+        <span class="font-mono tnum text-[var(--muted-foreground)]">${d.limit ? '剩餘 '+fmtK(d.remaining) : '請補充模型上限'}</span>
+      </div>
+    </div>
+
+    <section class="space-y-2">
+      <div class="flex items-center justify-between text-xs">
+        <span class="font-semibold">Token 結構</span>
+        <span class="text-[var(--muted-foreground)]">緩存命中 <b class="font-mono text-[var(--foreground)]">${d.hit.toFixed(1)}%</b></span>
+      </div>
+      ${stackBar(d.last, d.usage, 'h-2.5')}
+      <div class="space-y-1.5 pt-1">
+        ${legendRow(C_CACHE,'Cache Read', d.last.cache, d.last.cache/d.usage*100)}
+        ${legendRow(C_INPUT,'Uncached Input', d.last.input, d.last.input/d.usage*100)}
+        ${legendRow(C_OUTPUT,'Output', d.last.output, d.last.output/d.usage*100)}
+      </div>
+    </section>
+
+    <section class="space-y-1.5 pt-3 border-t border-[var(--card-border)]">
+      <div class="flex items-center justify-between text-xs">
+        <span class="font-semibold">每輪趨勢 <span class="font-normal text-[var(--muted-foreground)]">· 可選</span></span>
+        <span class="font-mono tnum text-[var(--muted-foreground)]">末輪 +${fmtK(d.delta)}</span>
+      </div>
+      <svg viewBox="0 0 300 62" preserveAspectRatio="none" class="w-full h-14">
+        ${th(.7)}${th(.85)}
+        <polygon points="0,60 ${line} 300,60" fill="${d.level.color}" fill-opacity=".14"/>
+        <polyline points="${line}" fill="none" stroke="${d.level.color}" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+      </svg>
+    </section>
+
+    <section class="flex items-center justify-between text-xs pt-3 border-t border-[var(--card-border)]">
+      <span class="text-[var(--muted-foreground)]">會話累計 <span class="opacity-70">· 可選</span></span>
+      <span class="font-mono tnum">${fmtK(d.cumulative)} · ${d.calls} 次調用 · ${d.t.length} 輪</span>
+    </section>
+
+    <section class="space-y-2 pt-3 border-t border-[var(--card-border)]">
+      <div class="text-xs text-[var(--muted-foreground)]">${d.level.hint}</div>
+      ${compactBlock(d, true)}
+      <div class="flex justify-between text-xs pt-1">${snapshot(d)}<button class="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">↻</button></div>
+    </section>
+  </div>`;
+}
+
+/* ---------------- Variant B: Turn ledger ---------------- */
+function VariantB(d){
+  if (state.expanded.size === 0) state.expanded.add(d.last.idx);
+  const rows = [...d.t].reverse().map((x, i, arr) => {
+    const prev = arr[i+1], dl = prev ? x.usage - prev.usage : x.usage, open = state.expanded.has(x.idx);
+    const lvlPct = d.limit ? x.usage/d.limit*100 : null;
+    const c = lvlPct === null ? 'var(--muted-foreground)' : lvlPct >= 85 ? 'var(--error)' : lvlPct >= 70 ? 'var(--warning)' : 'var(--foreground)';
+    return `<div class="border-b border-[var(--card-border)] ${i===0?'':'opacity-[.92]'}">
+      <button data-act="row" data-idx="${x.idx}" class="w-full grid grid-cols-[52px_1fr_auto] items-center gap-3 px-4 py-2 text-xs text-left hover:bg-[var(--secondary)]/40">
+        <span class="text-[var(--muted-foreground)] font-mono tnum leading-tight">#${x.idx}<br><span class="opacity-70">${x.time}</span></span>
+        <span class="relative">${stackBar(x, d.scaleMax, 'h-1.5')}</span>
+        <span class="text-right font-mono tnum leading-tight"><span style="color:${c}">${fmtK(x.usage)}</span><br><span class="text-[var(--muted-foreground)]">+${fmtK(dl)}</span></span>
+      </button>
+      ${open ? `<div class="grid grid-cols-4 gap-2 px-4 pb-3 pl-[76px] text-xs">
+        ${[['Cache',x.cache,C_CACHE],['Uncached',x.input,C_INPUT],['Output',x.output,C_OUTPUT]].map(([l,v,col]) =>
+          `<div><div class="flex items-center gap-1 text-[var(--muted-foreground)]"><span class="w-1.5 h-1.5 rounded-sm" style="background:${col}"></span>${l}</div><div class="font-mono tnum">${fmtK(v)}</div></div>`).join('')}
+        <div><div class="text-[var(--muted-foreground)]">命中率</div><div class="font-mono tnum">${(x.cache/(x.cache+x.input)*100).toFixed(0)}%</div></div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  const banner = (d.level.key === 'warn' || d.level.key === 'crit' || state.compact !== 'idle')
+    ? `<div class="mx-4 mt-3 rounded-md p-3 space-y-2" style="background:${mix(d.level.color,10)};border:1px solid ${mix(d.level.color,40)}">
+         <div class="text-xs"><b style="color:${d.level.color}">${d.level.label}</b> · ${d.level.hint}</div>${compactBlock(d, true)}</div>` : '';
+  return `
+  <div class="sticky top-0 z-10 bg-[var(--card)] border-b border-[var(--card-border)] px-4 pt-3 pb-3 space-y-2">
+    <div class="flex items-center justify-between gap-2 text-xs">
+      ${convSelect('flex-1')}
+      <span class="font-mono text-[var(--muted-foreground)] truncate max-w-[40%]">${d.sc.model}</span>
+    </div>
+    <div class="flex items-baseline justify-between">
+      <span class="text-xs text-[var(--muted-foreground)]">Context Usage</span>
+      <span class="font-mono tnum text-sm font-semibold">${fmtK(d.usage)}<span class="text-[var(--muted-foreground)] font-normal"> / ${d.limit?fmtK(d.limit):'?'}</span>
+        <span class="ml-1" style="color:${d.level.color}">${d.limit ? d.pct.toFixed(1)+'%' : ''}</span></span>
+    </div>
+    <div class="relative">
+      <div class="w-full h-2 rounded-full bg-[var(--secondary)] overflow-hidden ${d.limit?'':'hatch'}">
+        <div class="h-full rounded-full ease" style="width:${d.limit?Math.min(100,d.pct):0}%;background:${d.level.color}"></div>
+      </div>${thresholdMarks(d)}
+    </div>
+    <div class="flex justify-between text-xs">${snapshot(d)}<span class="text-[var(--muted-foreground)]">命中 ${d.hit.toFixed(0)}%</span></div>
+  </div>
+  ${banner}
+  <div class="flex items-center justify-between px-4 pt-3 pb-1 text-xs text-[var(--muted-foreground)]">
+    <span>每個 Stop 一行 · 點擊展開結構</span>
+    <span class="flex items-center gap-2">
+      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm" style="background:${C_CACHE}"></span>Cache</span>
+      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm" style="background:${C_INPUT}"></span>Input</span>
+      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm" style="background:${C_OUTPUT}"></span>Output</span>
+    </span>
+  </div>
+  <div>${rows}</div>
+  <div class="px-4 py-3 flex items-center justify-between text-xs border-t border-[var(--card-border)]">
+    <span class="text-[var(--muted-foreground)]">累計 ${d.t.length} 輪 · ${d.calls} 次調用</span>
+    <span class="font-mono tnum">${fmtK(d.cumulative)} tokens</span>
+  </div>
+  ${d.level.key === 'ok' || d.level.key === 'unknown' ? `<div class="px-4 pb-4 flex justify-end">${state.compact==='idle'?compactBlock(d,false):''}</div>` : ''}`;
+}
+
+/* ---------------- Variant C: Capacity tank ---------------- */
+function VariantC(d){
+  const H = 380, max = d.scaleMax, h = v => (v/max*H);
+  const ticks = d.t.slice(0,-1).map(x => `<span class="absolute right-[-7px] w-[5px] h-px" style="bottom:${h(x.usage)}px;background:var(--muted-foreground);opacity:.6"></span>`).join('');
+  const thr = q => `<div class="absolute left-[-4px] right-[-4px] border-t border-dashed" style="bottom:${q*H}px;border-color:${q>.8?'var(--error)':'var(--warning)'}"></div>
+                    <span class="absolute left-[calc(100%+10px)] text-[10px] font-mono" style="bottom:${q*H-6}px;color:${q>.8?'var(--error)':'var(--warning)'}">${q*100}%</span>`;
+  return `
+  <div class="p-4 space-y-3">
+    <div class="flex items-center gap-2 text-xs">
+      ${convSelect('flex-1')}
+    </div>
+    <div class="flex items-center justify-between text-xs">
+      <span class="font-mono text-[var(--muted-foreground)] truncate">${d.sc.model}</span>
+      ${snapshot(d)}
+    </div>
+
+    <div class="flex gap-6 pt-2">
+      <!-- tank -->
+      <div class="relative shrink-0 w-[68px]" style="height:${H}px">
+        <div class="absolute inset-0 rounded-lg border-2 border-[var(--border)] overflow-hidden ${d.limit?'':'hatch'} ${d.limit?'':'border-dashed'}">
+          <div class="absolute bottom-0 left-0 right-0 flex flex-col-reverse">
+            <div class="ease" style="height:${h(d.last.cache)}px;background:${C_CACHE}"></div>
+            <div class="ease" style="height:${h(d.last.input)}px;background:${C_INPUT}"></div>
+            <div class="ease" style="height:${h(d.last.output)}px;background:${C_OUTPUT}"></div>
+          </div>
+          <div class="absolute top-2 left-0 right-0 text-center text-[10px] text-[var(--muted-foreground)] leading-tight">
+            ${d.limit ? '剩餘<br><b class="font-mono text-[var(--foreground)]">'+fmtK(d.remaining)+'</b>' : '上限<br>未知'}
+          </div>
+        </div>
+        ${d.limit ? thr(.7)+thr(.85) : ''}
+        ${ticks}
+      </div>
+
+      <!-- readout -->
+      <div class="flex-1 min-w-0 flex flex-col justify-end space-y-4 pb-1">
+        <div>
+          <div class="text-xs text-[var(--muted-foreground)]">Context Usage</div>
+          <div class="text-4xl font-bold font-mono tnum tracking-tight leading-none mt-1" style="color:${d.level.key==='ok'?'var(--foreground)':d.level.color}">${pctText(d)}</div>
+          <div class="text-xs font-mono tnum text-[var(--muted-foreground)] mt-1">${fmtN(d.usage)} / ${d.limit?fmtN(d.limit):'—'}</div>
+        </div>
+        <div class="space-y-1.5">
+          ${legendRow(C_OUTPUT,'Output', d.last.output, d.last.output/d.usage*100)}
+          ${legendRow(C_INPUT,'Uncached', d.last.input, d.last.input/d.usage*100)}
+          ${legendRow(C_CACHE,'Cache Read', d.last.cache, d.last.cache/d.usage*100)}
+          <div class="flex justify-between text-xs pt-1 border-t border-[var(--card-border)]"><span class="text-[var(--muted-foreground)]">緩存命中率</span><span class="font-mono tnum">${d.hit.toFixed(1)}%</span></div>
+        </div>
+        <div class="text-xs rounded-md p-2 bg-[var(--secondary)]/50 leading-relaxed">
+          <span class="text-[var(--muted-foreground)]">近 3 輪平均增速</span> <b class="font-mono">+${fmtK(d.growth)}</b>/輪<br>
+          ${d.toWarn ? `約 <b class="font-mono">${d.toWarn}</b> 輪後到達 85%` : d.limit ? `<span style="color:var(--error)">已越過 85% 線</span>` : '<span class="text-[var(--muted-foreground)]">上限未知，無法預測</span>'}
+          <span class="text-[var(--muted-foreground)]"> · 新指標候選</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="text-[10px] text-[var(--muted-foreground)]">艙壁右側刻度 = 歷史各輪水位 · 可選趨勢模塊</div>
+
+    <div class="space-y-2 pt-3 border-t border-[var(--card-border)]">
+      <div class="flex justify-between text-xs"><span class="text-[var(--muted-foreground)]">會話累計 · 可選</span><span class="font-mono tnum">${fmtK(d.cumulative)} · ${d.t.length} 輪</span></div>
+      ${compactBlock(d, true)}
+    </div>
+  </div>`;
+}
+
+/* ---------------- Variant D: Glance minimal ---------------- */
+function VariantD(d){
+  const sec = (key, title, body) => `
+    <div class="border-t border-[var(--card-border)]">
+      <button data-act="d" data-key="${key}" class="w-full flex items-center justify-between py-2.5 text-xs">
+        <span class="font-medium">${title}</span><span class="text-[var(--muted-foreground)]">${state.dOpen[key]?'−':'+'}</span>
+      </button>
+      ${state.dOpen[key] ? `<div class="pb-3">${body}</div>` : ''}
+    </div>`;
+  const bars = d.t.map(x => `<div class="flex-1 rounded-t ease" style="height:${Math.max(4,x.usage/d.scaleMax*100)}%;background:${x===d.last?d.level.color:'var(--muted-foreground)'};opacity:${x===d.last?1:.35}"></div>`).join('');
+  const sentence = !d.limit ? `已用 ${fmtK(d.usage)} tokens，模型上限未知。`
+    : d.level.key === 'ok' ? `餘 ${fmtK(d.remaining)}，按當前節奏約 ${d.toWarn} 輪後需要壓縮。`
+    : d.level.key === 'warn' ? `餘 ${fmtK(d.remaining)}，約 ${d.toWarn} 輪後進入危險區。`
+    : `僅餘 ${fmtK(d.remaining)}，建議現在壓縮。`;
+  return `
+  <div class="px-5 pt-6 pb-4">
+    <div class="flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+      <span class="truncate">${CONVS[state.conv]}</span>${snapshot(d)}
+    </div>
+    <div class="mt-6 text-center">
+      <div class="text-7xl font-bold font-mono tnum tracking-tighter leading-none" style="color:${d.level.key==='ok'?'var(--foreground)':d.level.color}">
+        ${d.limit ? Math.round(d.pct)+'<span class="text-3xl align-top">%</span>' : fmtK(d.usage)}
+      </div>
+      <div class="mt-3 text-sm">${sentence}</div>
+      <div class="mt-1 text-xs font-mono text-[var(--muted-foreground)]">${d.sc.model}</div>
+    </div>
+    <div class="relative mt-5 mb-6">
+      <div class="w-full h-1 rounded-full bg-[var(--secondary)] overflow-hidden ${d.limit?'':'hatch'}">
+        <div class="h-full ease" style="width:${d.limit?Math.min(100,d.pct):0}%;background:${d.level.color}"></div>
+      </div>${thresholdMarks(d)}
+    </div>
+    ${(d.level.key==='warn'||d.level.key==='crit'||state.compact!=='idle') ? `<div class="mb-5">${compactBlock(d,true)}</div>` : ''}
+    ${sec('breakdown','Token 結構', `
+      ${stackBar(d.last, d.usage, 'h-2')}
+      <div class="space-y-1.5 mt-2">
+        ${legendRow(C_CACHE,'Cache Read', d.last.cache, d.last.cache/d.usage*100)}
+        ${legendRow(C_INPUT,'Uncached Input', d.last.input, d.last.input/d.usage*100)}
+        ${legendRow(C_OUTPUT,'Output', d.last.output, d.last.output/d.usage*100)}
+        <div class="flex justify-between text-xs"><span class="text-[var(--muted-foreground)]">緩存命中率</span><span class="font-mono">${d.hit.toFixed(1)}%</span></div>
+      </div>`)}
+    ${sec('trend','每輪趨勢 · 可選', `<div class="flex items-end gap-1 h-16">${bars}</div>
+      <div class="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1"><span>#1</span><span>末輪 +${fmtK(d.delta)}</span><span>#${d.t.length}</span></div>`)}
+    ${sec('total','會話累計與切換 · 可選', `
+      <div class="flex justify-between text-xs mb-2"><span class="text-[var(--muted-foreground)]">累計消耗</span><span class="font-mono">${fmtK(d.cumulative)} · ${d.calls} 次調用</span></div>
+      ${convSelect('w-full')}`)}
+    ${(d.level.key==='ok'||d.level.key==='unknown') && state.compact==='idle' ? `<div class="border-t border-[var(--card-border)] pt-3 text-right">${compactBlock(d,false)}</div>` : ''}
+  </div>`;
+}
+
+/* ---------------- Variant E: Combo (A gauge + A tokens + D trend + D total/switch) ---------------- */
+function VariantE(d){
+  const R = 80, L = Math.PI*R, p = d.limit ? Math.min(1, d.pct/100) : 0;
+  const tick = q => { const a = Math.PI*(1-q); const x1=100+(R-11)*Math.cos(a), y1=100-(R-11)*Math.sin(a), x2=100+(R+11)*Math.cos(a), y2=100-(R+11)*Math.sin(a);
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--foreground)" stroke-opacity=".4" stroke-width="1.5"/>`; };
+  const sec = (key, title, extra, body) => `
+    <div class="border-t border-[var(--card-border)]">
+      <button data-act="d" data-key="${key}" class="w-full flex items-center justify-between py-2.5 text-xs">
+        <span class="font-semibold">${title}</span>
+        <span class="flex items-center gap-2 text-[var(--muted-foreground)]">${state.dOpen[key] ? '' : extra}<span>${state.dOpen[key]?'−':'+'}</span></span>
+      </button>
+      ${state.dOpen[key] ? `<div class="pb-3">${body}</div>` : ''}
+    </div>`;
+  const bars = d.t.map(x => `<div class="flex-1 rounded-t ease" title="#${x.idx} ${x.time} · ${fmtN(x.usage)}" style="height:${Math.max(4,x.usage/d.scaleMax*100)}%;background:${x===d.last?d.level.color:'var(--muted-foreground)'};opacity:${x===d.last?1:.35}"></div>`).join('');
+  return `
+  <div class="p-4 space-y-4">
+    <div class="flex items-center justify-between gap-2 text-xs">
+      <span class="truncate font-medium">${CONVS[state.conv]}</span>
+      <span class="font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)] truncate max-w-[45%]">${d.sc.model}</span>
+    </div>
+
+    <!-- A: gauge -->
+    <div class="rounded-lg border border-[var(--card-border)] p-3">
+      <svg viewBox="0 0 200 112" class="w-full max-w-[260px] mx-auto block">
+        <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--secondary)" stroke-width="14" stroke-linecap="round"/>
+        <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="${d.level.color}" stroke-width="14" stroke-linecap="round"
+              stroke-dasharray="${L}" stroke-dashoffset="${L*(1-p)}" class="ease" ${d.limit?'':'stroke-opacity="0"'}/>
+        ${d.limit ? tick(.7)+tick(.85) : ''}
+        <text x="100" y="82" text-anchor="middle" font-size="26" font-weight="700" fill="var(--foreground)" font-family="ui-monospace,monospace">${pctText(d)}</text>
+        <text x="100" y="100" text-anchor="middle" font-size="10" fill="var(--muted-foreground)">${d.limit ? fmtK(d.usage)+' / '+fmtK(d.limit) : 'tokens · 上限未知'}</text>
+      </svg>
+      <div class="flex items-center justify-between text-xs mt-1">
+        <span class="font-medium" style="color:${d.level.color}">● ${d.level.label}</span>
+        <span class="font-mono tnum text-[var(--muted-foreground)]">${d.limit ? '剩餘 '+fmtK(d.remaining) : '請補充模型上限'}</span>
+      </div>
+    </div>
+
+    <!-- A: token structure -->
+    <section class="space-y-2">
+      <div class="flex items-center justify-between text-xs">
+        <span class="font-semibold">Token 結構</span>
+        <span class="text-[var(--muted-foreground)]">緩存命中 <b class="font-mono text-[var(--foreground)]">${d.hit.toFixed(1)}%</b></span>
+      </div>
+      ${stackBar(d.last, d.usage, 'h-2.5')}
+      <div class="space-y-1.5 pt-1">
+        ${legendRow(C_CACHE,'Cache Read', d.last.cache, d.last.cache/d.usage*100)}
+        ${legendRow(C_INPUT,'Uncached Input', d.last.input, d.last.input/d.usage*100)}
+        ${legendRow(C_OUTPUT,'Output', d.last.output, d.last.output/d.usage*100)}
+      </div>
+    </section>
+
+    <!-- D: collapsible trend + total/switch -->
+    <div>
+      ${sec('eTrend','每輪趨勢', `<span class="font-mono">末輪 +${fmtK(d.delta)}</span>`, `
+        <div class="flex items-end gap-1 h-16">${bars}</div>
+        <div class="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1"><span>#1</span><span>末輪 +${fmtK(d.delta)}</span><span>#${d.t.length}</span></div>`)}
+      ${sec('eTotal','會話累計與切換', `<span class="font-mono">${fmtK(d.cumulative)}</span>`, `
+        <div class="flex justify-between text-xs mb-2"><span class="text-[var(--muted-foreground)]">累計消耗</span><span class="font-mono tnum">${fmtK(d.cumulative)} · ${d.calls} 次調用 · ${d.t.length} 輪</span></div>
+        ${convSelect('w-full')}`)}
+    </div>
+
+    <!-- confirmed: safe quick action -->
+    <section class="space-y-2 pt-3 border-t border-[var(--card-border)]">
+      <div class="text-xs text-[var(--muted-foreground)]">${d.level.hint}</div>
+      ${compactBlock(d, true)}
+      <div class="flex justify-between text-xs pt-1">${snapshot(d)}<button class="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">↻</button></div>
+    </section>
+  </div>`;
+}
+
+/* ---------------- render & wiring ---------------- */
+const RENDER = { A:VariantA, B:VariantB, C:VariantC, D:VariantD, E:VariantE };
+function render(){
+  const d = derive();
+  document.getElementById('root').innerHTML = RENDER[state.variant](d);
+  document.getElementById('tab-dot').style.background = d.level.color;
+  const v = VARIANTS.find(x => x.key === state.variant);
+  document.getElementById('vlabel').textContent = `${v.key} · ${v.name}`;
+  document.getElementById('scen').innerHTML = Object.entries(SCEN).map(([k,s]) =>
+    `<button data-s="${k}" class="px-2 py-0.5 rounded-full ${k===state.scenario?'font-semibold':''}" style="${k===state.scenario?'background:var(--background);color:var(--foreground)':'opacity:.75'}">${s.label}</button>`).join('');
+}
+function go(step){
+  const i = VARIANTS.findIndex(x => x.key === state.variant);
+  state.variant = VARIANTS[(i + step + VARIANTS.length) % VARIANTS.length].key;
+  state.compact = 'idle';
+  try { history.replaceState(null, '', '?variant=' + state.variant); } catch (e) {}
+  render();
+}
+document.getElementById('prev').onclick = () => go(-1);
+document.getElementById('next').onclick = () => go(1);
+document.addEventListener('keydown', e => {
+  const t = e.target; if (t.closest && t.closest('input,textarea,select,[contenteditable]')) return;
+  if (e.key === 'ArrowLeft') go(-1); if (e.key === 'ArrowRight') go(1);
+});
+document.getElementById('scen').addEventListener('click', e => {
+  const b = e.target.closest('[data-s]'); if (!b) return;
+  state.scenario = b.dataset.s; state.compact = 'idle'; state.expanded.clear(); render();
+});
+document.getElementById('running').onchange = e => { state.running = e.target.checked; state.compact = 'idle'; render(); };
+document.querySelectorAll('.wbtn').forEach(b => b.onclick = () => {
+  document.getElementById('pane').style.width = b.dataset.w + 'px';
+  document.getElementById('caption').style.maxWidth = b.dataset.w + 'px';
+  document.querySelectorAll('.wbtn').forEach(x => x.style.background = x === b ? 'var(--secondary)' : 'transparent');
+});
+const root = document.getElementById('root');
+root.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const a = b.dataset.act;
+  if (a === 'compact-ask') state.compact = 'confirm';
+  else if (a === 'compact-no') state.compact = 'idle';
+  else if (a === 'compact-yes') state.compact = 'sent';
+  else if (a === 'row') { const i = +b.dataset.idx; state.expanded.has(i) ? state.expanded.delete(i) : state.expanded.add(i); }
+  else if (a === 'd') state.dOpen[b.dataset.key] = !state.dOpen[b.dataset.key];
+  else return;
+  render();
+});
+root.addEventListener('change', e => { if (e.target.dataset.act === 'conv') { state.conv = +e.target.value; render(); } });
+
+document.querySelector('.wbtn[data-w="440"]').click();
+render();
+</script>
+</body>
+</html>
