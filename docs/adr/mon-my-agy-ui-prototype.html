@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mon-My-Agy · UI Prototype v3</title>
+  <title>Mon-My-Agy · UI Prototype v4</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     .tabular-nums { font-variant-numeric: tabular-nums; }
-    .bar-transition { transition: width 0.3s ease, background-color 0.25s ease; }
+    .bar-transition { transition: width 0.28s ease, background-color 0.25s ease; }
   </style>
 </head>
 <body class="bg-[var(--background)] text-[var(--foreground)] antialiased m-0 p-4">
@@ -16,46 +16,73 @@
     <!-- Prototype Controller -->
     <section class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 space-y-3">
       <div class="flex items-center justify-between gap-2 pb-2 border-b border-[var(--card-border)]">
-        <span class="text-xs font-semibold tracking-wide uppercase text-[var(--primary)]">PROTOTYPE v3 · 極致密度評估</span>
-        <span class="text-xs text-[var(--muted-foreground)]">/compact 進度填充按鈕</span>
+        <span class="text-xs font-semibold tracking-wide uppercase text-[var(--primary)]">PROTOTYPE v4 · 細節打磨預覽</span>
+        <span class="text-xs text-[var(--muted-foreground)]">Icon 化 · 防抖動 · WCAG AA</span>
       </div>
 
-      <!-- Scenario States -->
+      <!-- 1. Scenario States -->
       <div class="space-y-1.5">
         <div class="text-xs text-[var(--muted-foreground)]">1. 模擬上下文水位</div>
         <div class="grid grid-cols-5 gap-1.5">
-          <button data-state="normal" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">正常 21%</button>
-          <button data-state="warning" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">預警 78%</button>
-          <button data-state="critical" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">危險 93%</button>
-          <button data-state="unknown" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">未知模型</button>
-          <button data-state="empty" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">空狀態</button>
+          <button data-state="normal" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">正常 21%</button>
+          <button data-state="warning" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">預警 78%</button>
+          <button data-state="critical" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">危險 93%</button>
+          <button data-state="unknown" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">未知模型</button>
+          <button data-state="empty" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">空狀態</button>
         </div>
       </div>
 
-      <!-- Width & Optional Detail Toggle -->
-      <div class="grid grid-cols-2 gap-3 pt-1">
+      <!-- 2. Theme & Accent Preview -->
+      <div class="grid grid-cols-2 gap-3 pt-0.5">
         <div class="space-y-1.5">
-          <div class="text-xs text-[var(--muted-foreground)]">2. 模擬側邊欄寬度</div>
-          <div class="grid grid-cols-2 gap-1.5">
-            <button data-width="320" class="width-btn px-2 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition">窄版 320px</button>
-            <button data-width="440" class="width-btn px-2 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition">標準 440px</button>
+          <div class="text-xs text-[var(--muted-foreground)]">2. 預覽主題模式</div>
+          <div class="grid grid-cols-3 gap-1">
+            <button data-theme="host" class="theme-btn px-1.5 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">跟隨宿主</button>
+            <button data-theme="light" class="theme-btn px-1.5 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">淺色</button>
+            <button data-theme="dark" class="theme-btn px-1.5 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">深色</button>
           </div>
         </div>
         <div class="space-y-1.5">
-          <div class="text-xs text-[var(--muted-foreground)]">3. 細節開關</div>
-          <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none pt-1">
-            <input id="toggleCumulative" type="checkbox" checked class="accent-[var(--primary)]" />
-            <span>顯示會話累計消耗</span>
-          </label>
+          <div class="text-xs text-[var(--muted-foreground)]">3. 強調色 (Accent)</div>
+          <div class="flex items-center gap-1.5 pt-0.5">
+            <button data-accent="host" title="跟隨宿主強調色" class="accent-btn px-2 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">宿主</button>
+            <button data-accent="blue" title="Ocean Blue" class="accent-btn w-6 h-6 rounded-full border-2 border-[var(--border)] cursor-pointer" style="background:#2563eb;"></button>
+            <button data-accent="violet" title="Violet" class="accent-btn w-6 h-6 rounded-full border-2 border-[var(--border)] cursor-pointer" style="background:#7c3aed;"></button>
+            <button data-accent="emerald" title="Emerald" class="accent-btn w-6 h-6 rounded-full border-2 border-[var(--border)] cursor-pointer" style="background:#059669;"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Width, Cumulative Toggle & Live Jitter Test -->
+      <div class="grid grid-cols-2 gap-3 pt-0.5">
+        <div class="space-y-1.5">
+          <div class="text-xs text-[var(--muted-foreground)]">4. 側邊欄寬度</div>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button data-width="320" class="width-btn px-2 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">窄版 320px</button>
+            <button data-width="440" class="width-btn px-2 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition cursor-pointer">標準 440px</button>
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="text-xs text-[var(--muted-foreground)]">5. 細節與防抖測試</div>
+          <div class="flex items-center gap-3 pt-1">
+            <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+              <input id="toggleCumulative" type="checkbox" checked class="accent-[var(--primary)]" />
+              <span>累計消耗</span>
+            </label>
+            <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+              <input id="toggleLiveTick" type="checkbox" class="accent-[var(--primary)]" />
+              <span>實時跳動</span>
+            </label>
+          </div>
         </div>
       </div>
     </section>
 
     <!-- Simulated Auxiliary Side Pane -->
-    <div id="paneWrapper" class="mx-auto transition-all duration-200" style="max-width: 440px;">
-      <main class="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
+    <div id="paneWrapper" class="mx-auto transition-all duration-200 rounded-xl" style="max-width: 440px;">
+      <main class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm">
 
-        <!-- Header: Progress-filled /compact container right next to Manual Refresh -->
+        <!-- Header: Icon-only Liquid-fill /compact + Refresh + Colors -->
         <header class="px-3.5 py-2.5 border-b border-[var(--card-border)] flex items-center justify-between gap-2">
           <div class="flex items-center gap-2 min-w-0">
             <span id="headerDot" class="w-2.5 h-2.5 rounded-full shrink-0"></span>
@@ -63,29 +90,116 @@
             <span id="modelBadge" class="text-xs px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--secondary-foreground)] font-mono truncate"></span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
-            <button id="compactBtn" title="發送 /compact 壓縮上下文"
-              class="relative overflow-hidden px-2.5 py-1 rounded-md border border-[var(--border)] text-xs font-mono font-medium text-[var(--foreground)] transition cursor-pointer">
+            <!-- Icon-only /compact button (2x width so liquid-fill color leads; icon matches refreshBtn) -->
+            <button id="compactBtn"
+              aria-label="Compact"
+              title="Compact"
+              class="relative overflow-hidden w-14 h-7 flex items-center justify-center rounded-md border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer">
               <span id="compactFill" class="absolute inset-y-0 left-0 bar-transition pointer-events-none" style="width: 0%;"></span>
-              <span class="relative z-10">/compact</span>
+              <!-- Compress / Compact Icon (inward arrows toward center line) -->
+              <svg class="relative z-10 w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8 1.75v4.5M5.5 4.25L8 6.25l2.5-2" />
+                <path d="M2.5 8h11" />
+                <path d="M8 14.25v-4.5M5.5 11.75L8 9.75l2.5 2" />
+              </svg>
             </button>
-            <button id="refreshBtn" title="手動刷新"
-              class="px-2 py-1 rounded-md border border-[var(--border)] text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer">
-              ↻
+            <!-- Manual Refresh Button -->
+            <button id="refreshBtn"
+              aria-label="Refresh"
+              title="Refresh"
+              class="w-7 h-7 flex items-center justify-center rounded-md border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M13.25 8a5.25 5.25 0 1 1-1.3-3.45" />
+                <path d="M13.25 2.75v2.5h-2.5" />
+              </svg>
+            </button>
+            <!-- Palette / Color Customization Button -->
+            <button id="colorToggleBtn"
+              aria-label="Colors"
+              title="Colors"
+              class="w-7 h-7 flex items-center justify-center rounded-md border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8 1.75a6.25 6.25 0 0 0 0 12.5h.75a1.5 1.5 0 0 0 1.06-2.56 1.5 1.5 0 0 1 1.06-2.56h1.38A2 2 0 0 0 14.25 7.1 6.25 6.25 0 0 0 8 1.75Z" />
+                <circle cx="5.25" cy="6.25" r="0.65" fill="currentColor" stroke="none" />
+                <circle cx="8" cy="4.75" r="0.65" fill="currentColor" stroke="none" />
+                <circle cx="10.75" cy="6.25" r="0.65" fill="currentColor" stroke="none" />
+              </svg>
             </button>
           </div>
         </header>
 
         <!-- Two-step inline confirmation for /compact -->
-        <div id="confirmBar" class="hidden px-3.5 py-2 border-b border-[var(--card-border)] bg-[var(--secondary)]/60 flex items-center justify-between gap-2 text-xs">
-          <span>確認發送 <code class="font-mono text-[var(--code-foreground)]">/compact</code> 壓縮上下文？</span>
+        <div id="confirmBar" class="hidden px-3.5 py-2 border-b border-[var(--card-border)] bg-[var(--secondary)] flex items-center justify-between gap-2 text-xs">
+          <span class="text-[var(--secondary-foreground)]">確認發送 <code class="font-mono font-semibold text-[var(--foreground)]">/compact</code> 壓縮上下文？</span>
           <div class="flex items-center gap-1.5 shrink-0">
-            <button id="cancelCompact" class="px-2 py-1 rounded-md border border-[var(--border)] text-xs cursor-pointer">取消</button>
+            <button id="cancelCompact" class="px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] text-xs cursor-pointer">取消</button>
             <button id="confirmCompact" class="px-2.5 py-1 rounded-md text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer">確認</button>
           </div>
         </div>
 
+        <!-- In-Plugin Collapsible Color Settings Drawer -->
+        <div id="colorDrawer" class="hidden px-3.5 py-2.5 border-b border-[var(--card-border)] bg-[var(--secondary)] space-y-2.5 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-[var(--foreground)]">自定義配色</span>
+            <div class="flex items-center gap-1.5">
+              <button id="resetColorsBtn" class="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer">重置</button>
+              <button id="closeColorsBtn" class="px-2 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer">完成</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1.5">
+              <div class="text-[var(--muted-foreground)]">上下文水位</div>
+              <label class="flex items-center justify-between gap-1.5 cursor-pointer">
+                <span class="text-[var(--secondary-foreground)]">健康水位</span>
+                <span class="flex items-center gap-1">
+                  <code id="hex-success" class="font-mono text-[var(--muted-foreground)] tabular-nums"></code>
+                  <input id="pick-success" data-var="--success" type="color" class="color-picker w-5 h-5 rounded border border-[var(--border)] bg-transparent cursor-pointer p-0" />
+                </span>
+              </label>
+              <label class="flex items-center justify-between gap-1.5 cursor-pointer">
+                <span class="text-[var(--secondary-foreground)]">預警水位</span>
+                <span class="flex items-center gap-1">
+                  <code id="hex-warning" class="font-mono text-[var(--muted-foreground)] tabular-nums"></code>
+                  <input id="pick-warning" data-var="--warning" type="color" class="color-picker w-5 h-5 rounded border border-[var(--border)] bg-transparent cursor-pointer p-0" />
+                </span>
+              </label>
+              <label class="flex items-center justify-between gap-1.5 cursor-pointer">
+                <span class="text-[var(--secondary-foreground)]">危險水位</span>
+                <span class="flex items-center gap-1">
+                  <code id="hex-error" class="font-mono text-[var(--muted-foreground)] tabular-nums"></code>
+                  <input id="pick-error" data-var="--error" type="color" class="color-picker w-5 h-5 rounded border border-[var(--border)] bg-transparent cursor-pointer p-0" />
+                </span>
+              </label>
+            </div>
+            <div class="space-y-1.5">
+              <div class="text-[var(--muted-foreground)]">Token 結構</div>
+              <label class="flex items-center justify-between gap-1.5 cursor-pointer">
+                <span class="text-[var(--secondary-foreground)]">Cache</span>
+                <span class="flex items-center gap-1">
+                  <code id="hex-chart-1" class="font-mono text-[var(--muted-foreground)] tabular-nums"></code>
+                  <input id="pick-chart-1" data-var="--chart-1" type="color" class="color-picker w-5 h-5 rounded border border-[var(--border)] bg-transparent cursor-pointer p-0" />
+                </span>
+              </label>
+              <label class="flex items-center justify-between gap-1.5 cursor-pointer">
+                <span class="text-[var(--secondary-foreground)]">Input</span>
+                <span class="flex items-center gap-1">
+                  <code id="hex-chart-2" class="font-mono text-[var(--muted-foreground)] tabular-nums"></code>
+                  <input id="pick-chart-2" data-var="--chart-2" type="color" class="color-picker w-5 h-5 rounded border border-[var(--border)] bg-transparent cursor-pointer p-0" />
+                </span>
+              </label>
+              <label class="flex items-center justify-between gap-1.5 cursor-pointer">
+                <span class="text-[var(--secondary-foreground)]">Output</span>
+                <span class="flex items-center gap-1">
+                  <code id="hex-chart-3" class="font-mono text-[var(--muted-foreground)] tabular-nums"></code>
+                  <input id="pick-chart-3" data-var="--chart-3" type="color" class="color-picker w-5 h-5 rounded border border-[var(--border)] bg-transparent cursor-pointer p-0" />
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <!-- Conversation Switcher -->
-        <div id="convBar" class="px-3.5 py-2 border-b border-[var(--card-border)] bg-[var(--background)]/40">
+        <div id="convBar" class="px-3.5 py-2 border-b border-[var(--card-border)] bg-[var(--background)]">
           <select id="convSelect" aria-label="切換對話" class="w-full bg-transparent text-xs text-[var(--foreground)] focus:outline-none truncate cursor-pointer">
             <option value="conv-1">Antigravity Context Usage Plugin Development</option>
             <option value="conv-2">Matt Pocock Skills Setup</option>
@@ -108,13 +222,19 @@
       </main>
     </div>
 
+    <!-- WCAG AA & Behavior Verification Note -->
+    <div id="wcagBanner" class="text-xs px-3 py-2 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--muted-foreground)] flex items-center justify-between gap-2">
+      <span>對比度策略：主體/狀態文字均保證 WCAG AA (≥ 4.5:1)</span>
+      <span id="liveIndicator" class="font-mono tabular-nums text-[var(--primary)]">IDLE</span>
+    </div>
+
     <!-- Toast Feedback -->
     <div id="toast" class="hidden text-xs px-3 py-2 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] text-center"></div>
 
   </div>
 
   <script>
-    const SCENARIOS = {
+    const BASE_SCENARIOS = {
       normal: {
         model: 'gemini-4-neon-medium',
         limit: 200000,
@@ -150,12 +270,88 @@
       empty: null
     };
 
+    // WCAG AA (>= 4.5:1) calibrated preview palettes for simulated Light / Dark themes
+    const THEME_PRESETS = {
+      light: {
+        '--background': '#f4f5f7',
+        '--card': '#ffffff',
+        '--foreground': '#111827',
+        '--muted-foreground': '#4b5563', // 7.5:1 on #fff
+        '--border': '#d1d5db',
+        '--card-border': '#e5e7eb',
+        '--secondary': '#eef0f4',
+        '--secondary-foreground': '#1f2937',
+        '--success': '#15803d',          // 5.1:1 on #fff
+        '--warning': '#b45309',          // 5.0:1 on #fff
+        '--error': '#b91c1c',            // 6.4:1 on #fff
+        '--chart-1': '#1d4ed8',
+        '--chart-2': '#047857',
+        '--chart-3': '#b45309'
+      },
+      dark: {
+        '--background': '#14171d',
+        '--card': '#1c2028',
+        '--foreground': '#f3f4f6',
+        '--muted-foreground': '#a1a8b5', // 6.6:1 on #1c2028
+        '--border': '#323946',
+        '--card-border': '#282e39',
+        '--secondary': '#262c36',
+        '--secondary-foreground': '#e5e7eb',
+        '--success': '#4ade80',          // 9.8:1 on #1c2028
+        '--warning': '#fbbf24',          // 10.2:1 on #1c2028
+        '--error': '#f87171',            // 6.5:1 on #1c2028
+        '--chart-1': '#60a5fa',
+        '--chart-2': '#34d399',
+        '--chart-3': '#fbbf24'
+      }
+    };
+
+    const ACCENT_PRESETS = {
+      blue:    { light: ['#1d4ed8', '#ffffff'], dark: ['#60a5fa', '#0b1220'] },
+      violet:  { light: ['#6d28d9', '#ffffff'], dark: ['#a78bfa', '#130b24'] },
+      emerald: { light: ['#047857', '#ffffff'], dark: ['#34d399', '#062016'] }
+    };
+
     const ui = {
       scenario: 'normal',
+      theme: 'host',
+      accent: 'host',
       width: 440,
       showCumulative: true,
-      confirmingCompact: false
+      liveTick: false,
+      tickDelta: 0,
+      confirmingCompact: false,
+      colorDrawerOpen: false,
+      customColors: {}
     };
+
+    const PICKER_VARS = ['--success', '--warning', '--error', '--chart-1', '--chart-2', '--chart-3'];
+
+    function cssColorToHex(colorStr) {
+      const ctx = document.createElement('canvas').getContext('2d');
+      ctx.fillStyle = '#000000';
+      ctx.fillStyle = colorStr.trim();
+      const normalized = ctx.fillStyle;
+      if (normalized.startsWith('#')) return normalized.toLowerCase();
+      const m = normalized.match(/\d+/g);
+      if (!m || m.length < 3) return '#888888';
+      return '#' + m.slice(0, 3).map(v => Number(v).toString(16).padStart(2, '0')).join('');
+    }
+
+    function syncColorPickers() {
+      const wrapper = document.getElementById('paneWrapper');
+      const cs = getComputedStyle(wrapper);
+      PICKER_VARS.forEach(v => {
+        const key = v.slice(2);
+        const hex = ui.customColors[v] || cssColorToHex(cs.getPropertyValue(v));
+        const input = document.getElementById('pick-' + key);
+        const label = document.getElementById('hex-' + key);
+        if (input && input.value.toLowerCase() !== hex) input.value = hex;
+        if (label) label.textContent = hex;
+      });
+    }
+
+    let tickTimer = null;
 
     const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
     const fmtFull = (n) => n.toLocaleString('en-US');
@@ -165,6 +361,12 @@
       if (pct >= 85) return 'var(--error)';
       if (pct >= 70) return 'var(--warning)';
       return 'var(--success)';
+    }
+
+    // Mix status color slightly toward foreground in host mode to guarantee AA legibility
+    function getStatusTextColor(pct) {
+      const base = getStatusColor(pct);
+      return `color-mix(in srgb, ${base} 82%, var(--foreground))`;
     }
 
     function getStatusLabel(pct) {
@@ -182,13 +384,75 @@
       el._t = setTimeout(() => el.classList.add('hidden'), 2200);
     }
 
+    function applySimulatedTheme() {
+      const wrapper = document.getElementById('paneWrapper');
+      const allKeys = [
+        '--background', '--card', '--foreground', '--muted-foreground',
+        '--border', '--card-border', '--secondary', '--secondary-foreground',
+        '--success', '--warning', '--error', '--chart-1', '--chart-2', '--chart-3',
+        '--primary', '--primary-foreground'
+      ];
+      allKeys.forEach(k => wrapper.style.removeProperty(k));
+
+      if (ui.theme !== 'host') {
+        const preset = THEME_PRESETS[ui.theme];
+        Object.entries(preset).forEach(([k, v]) => wrapper.style.setProperty(k, v));
+      }
+
+      if (ui.accent !== 'host') {
+        const isLight = ui.theme === 'light' ||
+          (ui.theme === 'host' && document.documentElement.classList.contains('light'));
+        const [primary, primaryFg] = ACCENT_PRESETS[ui.accent][isLight ? 'light' : 'dark'];
+        wrapper.style.setProperty('--primary', primary);
+        wrapper.style.setProperty('--primary-foreground', primaryFg);
+      }
+
+      Object.entries(ui.customColors).forEach(([k, v]) => wrapper.style.setProperty(k, v));
+      syncColorPickers();
+    }
+
+    function getActiveData() {
+      const base = BASE_SCENARIOS[ui.scenario];
+      if (!base) return null;
+      const d = ui.tickDelta;
+      return {
+        model: base.model,
+        limit: base.limit,
+        uncachedInput: base.uncachedInput + d * 137,
+        cacheRead: base.cacheRead + d * 419,
+        output: base.output + d * 43,
+        cumulative: {
+          uncachedInput: base.cumulative.uncachedInput + d * 137,
+          cacheRead: base.cumulative.cacheRead + d * 419,
+          output: base.cumulative.output + d * 43
+        }
+      };
+    }
+
     function render() {
-      // Update controller buttons
+      // Controller states
       document.querySelectorAll('.state-btn').forEach(btn => {
         const active = btn.dataset.state === ui.scenario;
         btn.style.background = active ? 'var(--primary)' : 'transparent';
         btn.style.color = active ? 'var(--primary-foreground)' : 'var(--foreground)';
         btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+      });
+      document.querySelectorAll('.theme-btn').forEach(btn => {
+        const active = btn.dataset.theme === ui.theme;
+        btn.style.background = active ? 'var(--primary)' : 'transparent';
+        btn.style.color = active ? 'var(--primary-foreground)' : 'var(--foreground)';
+        btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+      });
+      document.querySelectorAll('.accent-btn').forEach(btn => {
+        const active = btn.dataset.accent === ui.accent;
+        if (btn.dataset.accent === 'host') {
+          btn.style.background = active ? 'var(--primary)' : 'transparent';
+          btn.style.color = active ? 'var(--primary-foreground)' : 'var(--foreground)';
+          btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+        } else {
+          btn.style.outline = active ? '2px solid var(--foreground)' : 'none';
+          btn.style.outlineOffset = '2px';
+        }
       });
       document.querySelectorAll('.width-btn').forEach(btn => {
         const active = Number(btn.dataset.width) === ui.width;
@@ -197,10 +461,17 @@
         btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
       });
 
+      applySimulatedTheme();
+
       document.getElementById('paneWrapper').style.maxWidth = ui.width + 'px';
       document.getElementById('confirmBar').classList.toggle('hidden', !ui.confirmingCompact);
+      document.getElementById('colorDrawer').classList.toggle('hidden', !ui.colorDrawerOpen);
+      const colorBtn = document.getElementById('colorToggleBtn');
+      colorBtn.style.borderColor = ui.colorDrawerOpen ? 'var(--primary)' : 'var(--border)';
+      colorBtn.style.color = ui.colorDrawerOpen ? 'var(--foreground)' : '';
+      document.getElementById('liveIndicator').textContent = ui.liveTick ? `TICK #${ui.tickDelta}` : 'IDLE';
 
-      const d = SCENARIOS[ui.scenario];
+      const d = getActiveData();
       const dotEl = document.getElementById('headerDot');
       const modelEl = document.getElementById('modelBadge');
       const compactBtn = document.getElementById('compactBtn');
@@ -215,6 +486,8 @@
         modelEl.textContent = 'waiting';
         compactFill.style.width = '0%';
         compactBtn.style.borderColor = 'var(--border)';
+        compactBtn.disabled = true;
+        compactBtn.style.opacity = '0.5';
         convBar.classList.add('hidden');
         primaryEl.innerHTML = `<div class="text-xs text-[var(--muted-foreground)] py-2">尚無已記錄的對話數據。完成一次對話回覆後將自動顯示 Context Usage。</div>`;
         breakdownEl.classList.add('hidden');
@@ -222,48 +495,51 @@
         return;
       }
 
+      compactBtn.disabled = false;
+      compactBtn.style.opacity = '1';
       convBar.classList.remove('hidden');
       breakdownEl.classList.remove('hidden');
 
       const usage = d.uncachedInput + d.cacheRead + d.output;
       const pct = d.limit ? (usage / d.limit) * 100 : null;
       const remaining = d.limit ? Math.max(0, d.limit - usage) : null;
-      const color = getStatusColor(pct);
+      const barColor = getStatusColor(pct);
+      const textColor = getStatusTextColor(pct);
       const barW = pct !== null ? Math.min(100, pct) : 100;
 
-      dotEl.style.background = color;
+      dotEl.style.background = barColor;
       modelEl.textContent = d.model;
 
-      // Liquid-fill /compact button tracks Context Usage percentage & status color
+      // Liquid-fill icon button (2x width) makes status fill color the visual centerpiece
       if (pct !== null) {
         compactFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
-        compactFill.style.background = `color-mix(in srgb, ${color} 32%, transparent)`;
-        compactBtn.style.borderColor = `color-mix(in srgb, ${color} 60%, var(--border))`;
+        compactFill.style.background = `color-mix(in srgb, ${barColor} 34%, transparent)`;
+        compactBtn.style.borderColor = `color-mix(in srgb, ${barColor} 62%, var(--border))`;
       } else {
         compactFill.style.width = '0%';
         compactBtn.style.borderColor = 'var(--border)';
       }
 
-      // Primary Dense Telemetry
+      // Module 1: Primary Context Usage (strict tabular-nums)
       primaryEl.innerHTML = `
         <div class="font-mono space-y-2">
           <div class="flex items-center justify-between gap-2 text-xs">
             <span class="text-[var(--muted-foreground)]">CTX_WINDOW</span>
-            <span class="tabular-nums font-semibold" style="color:${color}">
+            <span class="tabular-nums font-semibold" style="color:${textColor}">
               ${fmtFull(usage)}${d.limit ? ' / ' + fmtFull(d.limit) + ' (' + pct.toFixed(1) + '%)' : ' TOKENS (LIMIT_UNKNOWN)'}
             </span>
           </div>
           <div class="w-full h-2 rounded bg-[var(--secondary)] overflow-hidden">
-            <div class="h-full bar-transition" style="width:${barW}%; background:${color}; ${pct === null ? 'opacity:0.45' : ''}"></div>
+            <div class="h-full bar-transition" style="width:${barW}%; background:${barColor}; ${pct === null ? 'opacity:0.45' : ''}"></div>
           </div>
           <div class="flex items-center justify-between text-xs text-[var(--muted-foreground)] tabular-nums">
-            <span>STATUS: <strong style="color:${color}">${getStatusLabel(pct)}</strong></span>
+            <span>STATUS: <strong style="color:${textColor}">${getStatusLabel(pct)}</strong></span>
             <span>${remaining !== null ? 'FREE: ' + fmtFull(remaining) : 'CFG: config.json'}</span>
           </div>
         </div>
       `;
 
-      // Token Breakdown
+      // Module 2: Token Breakdown (strict tabular-nums)
       const totalIn = d.uncachedInput + d.cacheRead;
       const cacheHit = totalIn > 0 ? ((d.cacheRead / totalIn) * 100).toFixed(1) : '0.0';
       const wCache = (d.cacheRead / usage) * 100;
@@ -272,8 +548,8 @@
 
       breakdownEl.innerHTML = `
         <div class="flex items-center justify-between text-xs">
-          <span class="font-medium">Token 結構分解</span>
-          <span class="text-[var(--muted-foreground)] tabular-nums">緩存命中率 <strong class="text-[var(--foreground)]">${cacheHit}%</strong></span>
+          <span class="font-medium text-[var(--foreground)]">Token 結構分解</span>
+          <span class="text-[var(--muted-foreground)] tabular-nums">緩存命中率 <strong class="text-[var(--foreground)] tabular-nums">${cacheHit}%</strong></span>
         </div>
         <div class="w-full h-2 rounded bg-[var(--secondary)] overflow-hidden flex">
           <div style="width:${wCache}%; background: var(--chart-1);" class="bar-transition" title="Cache Read"></div>
@@ -281,20 +557,20 @@
           <div style="width:${wOutput}%; background: var(--chart-3);" class="bar-transition" title="Output"></div>
         </div>
         <div class="space-y-1 font-mono text-xs tabular-nums">
-          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-1)"></i>Cache Read</span><span>${fmtFull(d.cacheRead)}</span></div>
-          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-2)"></i>Uncached Input</span><span>${fmtFull(d.uncachedInput)}</span></div>
-          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-3)"></i>Output</span><span>${fmtFull(d.output)}</span></div>
+          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-1)"></i>Cache Read</span><span class="text-[var(--foreground)] tabular-nums">${fmtFull(d.cacheRead)}</span></div>
+          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-2)"></i>Uncached Input</span><span class="text-[var(--foreground)] tabular-nums">${fmtFull(d.uncachedInput)}</span></div>
+          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-3)"></i>Output</span><span class="text-[var(--foreground)] tabular-nums">${fmtFull(d.output)}</span></div>
         </div>
       `;
 
-      // Cumulative Usage
+      // Module 3: Cumulative Usage (strict tabular-nums)
       cumulativeEl.classList.toggle('hidden', !ui.showCumulative);
       if (ui.showCumulative) {
         const total = d.cumulative.uncachedInput + d.cumulative.cacheRead + d.cumulative.output;
         cumulativeEl.innerHTML = `
           <div class="flex items-center justify-between text-xs">
-            <span class="font-medium">會話累計消耗</span>
-            <span class="font-semibold font-mono tabular-nums">${fmt(total)} tokens</span>
+            <span class="font-medium text-[var(--foreground)]">會話累計消耗</span>
+            <span class="font-semibold font-mono tabular-nums text-[var(--foreground)]">${fmt(total)} tokens</span>
           </div>
           <div class="flex items-center justify-between text-xs text-[var(--muted-foreground)] font-mono tabular-nums">
             <span>輸入 ${fmt(d.cumulative.uncachedInput)}</span>
@@ -306,21 +582,71 @@
     }
 
     document.querySelectorAll('.state-btn').forEach(btn => {
-      btn.onclick = () => { ui.scenario = btn.dataset.state; ui.confirmingCompact = false; render(); };
+      btn.onclick = () => { ui.scenario = btn.dataset.state; ui.tickDelta = 0; ui.confirmingCompact = false; render(); };
+    });
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.onclick = () => { ui.theme = btn.dataset.theme; render(); };
+    });
+    document.querySelectorAll('.accent-btn').forEach(btn => {
+      btn.onclick = () => { ui.accent = btn.dataset.accent; render(); };
     });
     document.querySelectorAll('.width-btn').forEach(btn => {
       btn.onclick = () => { ui.width = Number(btn.dataset.width); render(); };
     });
     document.getElementById('toggleCumulative').onchange = (e) => { ui.showCumulative = e.target.checked; render(); };
-    document.getElementById('compactBtn').onclick = () => { ui.confirmingCompact = !ui.confirmingCompact; render(); };
+    document.getElementById('toggleLiveTick').onchange = (e) => {
+      ui.liveTick = e.target.checked;
+      clearInterval(tickTimer);
+      if (ui.liveTick) {
+        tickTimer = setInterval(() => {
+          ui.tickDelta = (ui.tickDelta + 1) % 30;
+          render();
+        }, 600);
+      } else {
+        ui.tickDelta = 0;
+      }
+      render();
+    };
+    document.getElementById('compactBtn').onclick = () => {
+      if (!getActiveData()) return;
+      ui.confirmingCompact = !ui.confirmingCompact;
+      if (ui.confirmingCompact) ui.colorDrawerOpen = false;
+      render();
+    };
+    document.getElementById('colorToggleBtn').onclick = () => {
+      ui.colorDrawerOpen = !ui.colorDrawerOpen;
+      if (ui.colorDrawerOpen) ui.confirmingCompact = false;
+      render();
+    };
+    document.getElementById('closeColorsBtn').onclick = () => {
+      ui.colorDrawerOpen = false;
+      showToast('已保存自定義配色至 config.json（模擬）');
+      render();
+    };
     document.getElementById('cancelCompact').onclick = () => { ui.confirmingCompact = false; render(); };
     document.getElementById('confirmCompact').onclick = () => {
       ui.confirmingCompact = false;
       showToast('模擬調用 app.sendMessage("/compact") 成功');
       render();
     };
-    document.getElementById('refreshBtn').onclick = () => showToast('已刷新最新上下文快照');
+    document.getElementById('refreshBtn').onclick = () => {
+      ui.tickDelta += 1;
+      showToast('已刷新最新上下文快照');
+      render();
+    };
+    document.querySelectorAll('.color-picker').forEach(input => {
+      input.oninput = (e) => {
+        ui.customColors[e.target.dataset.var] = e.target.value.toLowerCase();
+        render();
+      };
+    });
+    document.getElementById('resetColorsBtn').onclick = () => {
+      ui.customColors = {};
+      render();
+      showToast('已重置為當前主題默認配色');
+    };
 
+    window.addEventListener('themechange', render);
     render();
   </script>
 </body>
