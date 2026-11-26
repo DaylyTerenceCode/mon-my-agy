@@ -427,4 +427,59 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     });
     expect(cumulativeEl?.classList.contains('hidden')).toBe(true);
   });
+
+  it('gracefully degrades when Context Window Limit is unknown (limit: null)', async () => {
+    const app = await mountBuiltApp();
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    await app.sendToolResult({
+      activeConversationId: 'conv-unknown',
+      conversations: [
+        {
+          conversationId: 'conv-unknown',
+          modelName: 'gemini-next-exp-05',
+          title: 'Unknown Model Session',
+          lastActiveAt: '2026-11-26T04:00:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-next-exp-05',
+        limit: null,
+        uncachedInput: 14200,
+        cacheRead: 48600,
+        output: 1120,
+        contextUsage: 63920,
+        utilizationPct: null,
+        remainingTokens: null,
+        cacheHitRate: 77.3885,
+        cumulative: { uncachedInput: 68400, cacheRead: 145000, output: 7210, total: 220610 },
+      },
+      statusLevel: 'unknown',
+    });
+
+    expect(doc.getElementById('headerDot')?.getAttribute('data-status')).toBe('unknown');
+    expect(doc.getElementById('modelBadge')?.textContent?.trim()).toBe('gemini-next-exp-05');
+
+    const primaryEl = doc.getElementById('modPrimary');
+    const primaryText = primaryEl?.textContent ?? '';
+    expect(primaryText).toContain('CTX_WINDOW');
+    expect(primaryText).toContain('63,920 TOKENS (LIMIT_UNKNOWN)');
+    expect(primaryText).toContain('上限未知');
+    expect(primaryText).toContain('CFG: config.json');
+    expect(primaryText).not.toContain('%');
+    expect(primaryText).not.toContain('FREE:');
+    expect(primaryText).not.toContain('-');
+
+    const progressBar = primaryEl?.querySelector<HTMLElement>('[role="progressbar"]');
+    const barFill = primaryEl?.querySelector<HTMLElement>('.bar-fill');
+    expect(progressBar?.getAttribute('aria-valuenow')).toBe('0');
+    expect(barFill?.style.width).toBe('0%');
+
+    // Modules 2 and 3 remain visible with accurate breakdown & cumulative usage
+    expect(doc.getElementById('modBreakdown')?.classList.contains('hidden')).toBe(false);
+    expect(doc.getElementById('modBreakdown')?.textContent).toContain('77.4%');
+    expect(doc.getElementById('modCumulative')?.classList.contains('hidden')).toBe(false);
+    expect(doc.getElementById('modCumulative')?.textContent).toContain('220.6k tokens');
+  });
 });

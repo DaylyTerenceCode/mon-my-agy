@@ -414,4 +414,217 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       await close();
     }
   });
+
+  it('returns limit: null and statusLevel: unknown for unrecognized models without config.json', async () => {
+    const unknownTranscript = path.join(tmpDir, 'unknown-model.jsonl');
+    await fs.writeFile(
+      unknownTranscript,
+      JSON.stringify({
+        step_index: 1,
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        model: 'gemini-next-exp-05',
+        input_tokens: 14200,
+        cache_read_tokens: 48600,
+        output_tokens: 1120,
+      }) + '\n',
+      'utf8',
+    );
+    await runHookIndexer(
+      JSON.stringify({
+        conversationId: 'conv-unknown-1',
+        modelName: 'gemini-next-exp-05',
+        transcriptPath: unknownTranscript,
+      }),
+      pluginDataDir,
+    );
+
+    const { client, close } = await connectClient(pluginDataDir);
+    try {
+      const res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      const snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+
+      expect(snapshot.statusLevel).toBe('unknown');
+      expect(snapshot.telemetry?.model).toBe('gemini-next-exp-05');
+      expect(snapshot.telemetry?.limit).toBeNull();
+      expect(snapshot.telemetry?.utilizationPct).toBeNull();
+      expect(snapshot.telemetry?.remainingTokens).toBeNull();
+      expect(snapshot.telemetry?.contextUsage).toBe(63920);
+      expect(snapshot.telemetry?.cacheHitRate).toBeCloseTo(77.3885, 3);
+      expect(snapshot.telemetry?.cumulative.total).toBe(63920);
+    } finally {
+      await close();
+    }
+  });
+
+  it('resolves Context Window Limit from PLUGIN_DATA/config.json with exact and normalized prefix precedence over built-in limits', async () => {
+    await fs.mkdir(pluginDataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginDataDir, 'config.json'),
+      JSON.stringify({
+        contextWindowLimits: {
+          'gemini-4-neon': 300000,
+          'GEMINI-4-NEON-MEDIUM': 500000,
+          'custom-llm': 64000,
+          'custom-llm-pro': 128000,
+        },
+      }),
+      'utf8',
+    );
+
+    // 1. Exact override beats both shorter custom prefix and built-in table (200,000 -> 500,000)
+    const exactOverrideTranscript = path.join(tmpDir, 'exact-override.jsonl');
+    await fs.writeFile(
+      exactOverrideTranscript,
+      JSON.stringify({
+        step_index: 1,
+        model: 'gemini-4-neon-medium',
+        input_tokens: 50000,
+        cache_read_tokens: 50000,
+        output_tokens: 0,
+      }) + '\n',
+      'utf8',
+    );
+    await runHookIndexer(
+      JSON.stringify({
+        conversationId: 'conv-exact-override',
+        modelName: 'gemini-4-neon-medium',
+        transcriptPath: exactOverrideTranscript,
+      }),
+      pluginDataDir,
+    );
+
+    const { client, close } = await connectClient(pluginDataDir);
+    try {
+      let res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      let snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.telemetry?.limit).toBe(500000);
+      expect(snapshot.telemetry?.utilizationPct).toBeCloseTo(20.0, 4);
+      expect(snapshot.telemetry?.remainingTokens).toBe(400000);
+      expect(snapshot.statusLevel).toBe('normal');
+
+      // 2. Normalized prefix match (longest prefix wins: custom-llm-pro beats custom-llm)
+      const prefixTranscript = path.join(tmpDir, 'prefix-override.jsonl');
+      await fs.writeFile(
+        prefixTranscript,
+        JSON.stringify({
+          step_index: 1,
+          model: 'Custom-LLM-Pro-2026',
+          input_tokens: 96000,
+          cache_read_tokens: 0,
+          output_tokens: 0,
+        }) + '\n',
+        'utf8',
+      );
+      await runHookIndexer(
+        JSON.stringify({
+          conversationId: 'conv-prefix-override',
+          modelName: 'Custom-LLM-Pro-2026',
+          transcriptPath: prefixTranscript,
+        }),
+        pluginDataDir,
+      );
+
+      res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.telemetry?.limit).toBe(128000);
+      expect(snapshot.telemetry?.utilizationPct).toBeCloseTo(75.0, 4);
+      expect(snapshot.telemetry?.remainingTokens).toBe(32000);
+      expect(snapshot.statusLevel).toBe('warning');
+    } finally {
+      await close();
+    }
+  });
+
+  it('safely falls back to built-in limits when config.json is empty, malformed, or has invalid field values', async () => {
+    const transcript = path.join(tmpDir, 'fallback.jsonl');
+    await fs.writeFile(
+      transcript,
+      JSON.stringify({
+        step_index: 1,
+        model: 'gemini-4-neon-medium',
+        input_tokens: 20000,
+        cache_read_tokens: 0,
+        output_tokens: 0,
+      }) + '\n',
+      'utf8',
+    );
+    await runHookIndexer(
+      JSON.stringify({
+        conversationId: 'conv-fallback',
+        modelName: 'gemini-4-neon-medium',
+        transcriptPath: transcript,
+      }),
+      pluginDataDir,
+    );
+
+    const configPath = path.join(pluginDataDir, 'config.json');
+    const { client, close } = await connectClient(pluginDataDir);
+    try {
+      // 1. Corrupt JSON syntax
+      await fs.writeFile(configPath, '{invalid-json', 'utf8');
+      let res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      let snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.telemetry?.limit).toBe(200000);
+      expect(snapshot.statusLevel).toBe('normal');
+
+      // 2. Empty file
+      await fs.writeFile(configPath, '', 'utf8');
+      res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.telemetry?.limit).toBe(200000);
+
+      // 3. Invalid per-model values (negative, zero, float, string) ignored while valid siblings still work
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          contextWindowLimits: {
+            'gemini-4-neon-medium': -100,
+            'gemini-4-neon': 0,
+            'float-model': 12345.67,
+            'string-model': '200000',
+            'valid-custom': 80000,
+          },
+        }),
+        'utf8',
+      );
+      res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.telemetry?.limit).toBe(200000);
+
+      // Verify float/string entries are rejected (degrade to unknown) while valid-custom works
+      const floatTranscript = path.join(tmpDir, 'float-model.jsonl');
+      await fs.writeFile(
+        floatTranscript,
+        JSON.stringify({ step_index: 1, model: 'float-model', input_tokens: 1000, cache_read_tokens: 0, output_tokens: 0 }) + '\n',
+        'utf8',
+      );
+      await runHookIndexer(
+        JSON.stringify({ conversationId: 'conv-float', modelName: 'float-model', transcriptPath: floatTranscript }),
+        pluginDataDir,
+      );
+      res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.telemetry?.limit).toBeNull();
+      expect(snapshot.statusLevel).toBe('unknown');
+
+      const validTranscript = path.join(tmpDir, 'valid-custom.jsonl');
+      await fs.writeFile(
+        validTranscript,
+        JSON.stringify({ step_index: 1, model: 'valid-custom', input_tokens: 40000, cache_read_tokens: 0, output_tokens: 0 }) + '\n',
+        'utf8',
+      );
+      await runHookIndexer(
+        JSON.stringify({ conversationId: 'conv-valid', modelName: 'valid-custom', transcriptPath: validTranscript }),
+        pluginDataDir,
+      );
+      res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.telemetry?.limit).toBe(80000);
+      expect(snapshot.telemetry?.utilizationPct).toBeCloseTo(50.0, 4);
+      expect(snapshot.statusLevel).toBe('normal');
+    } finally {
+      await close();
+    }
+  });
 });

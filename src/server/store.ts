@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { resolveBuiltinContextWindowLimit } from '../shared/models.js';
+import { isPositiveInteger, resolveContextWindowLimit } from '../shared/models.js';
 import {
+  CONFIG_FILENAME,
   getStatusLevel,
   INDEX_FILENAME,
   isConversationIndexEntry,
@@ -9,6 +10,7 @@ import {
   type ConversationIndexFile,
   type ConversationSummary,
   type ConversationTelemetry,
+  type PluginConfig,
   type TelemetrySnapshot,
 } from '../shared/types.js';
 
@@ -86,8 +88,36 @@ async function readConversationIndex(dataDir: string): Promise<ConversationIndex
   }
 }
 
+async function readPluginConfig(dataDir: string): Promise<PluginConfig> {
+  try {
+    const raw = await fs.readFile(path.join(dataDir, CONFIG_FILENAME), 'utf8');
+    if (!raw.trim()) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    const obj = parsed as Record<string, unknown>;
+    const rawLimits = obj.contextWindowLimits;
+    if (!rawLimits || typeof rawLimits !== 'object' || Array.isArray(rawLimits)) {
+      return {};
+    }
+
+    const contextWindowLimits: Record<string, number> = {};
+    for (const [key, value] of Object.entries(rawLimits as Record<string, unknown>)) {
+      const trimmedKey = key.trim();
+      if (trimmedKey && isPositiveInteger(value)) {
+        contextWindowLimits[trimmedKey] = value;
+      }
+    }
+    return { contextWindowLimits };
+  } catch {
+    return {};
+  }
+}
+
 async function parseTranscriptTelemetry(
   entry: ConversationIndexEntry,
+  customLimits?: Record<string, number>,
 ): Promise<ConversationTelemetry | null> {
   let raw: string;
   try {
@@ -116,7 +146,7 @@ async function parseTranscriptTelemetry(
   }
 
   const model = latest.model ?? entry.modelName;
-  const limit = resolveBuiltinContextWindowLimit(model);
+  const limit = resolveContextWindowLimit(model, customLimits);
   const contextUsage = latest.uncachedInput + latest.cacheRead + latest.output;
   const utilizationPct = limit !== null && limit > 0 ? (contextUsage / limit) * 100 : null;
   const remainingTokens = limit !== null ? Math.max(0, limit - contextUsage) : null;
@@ -168,7 +198,8 @@ export async function readTelemetrySnapshot(
       ? entries.find((e) => e.conversationId === requestedConversationId)
       : undefined) ?? entries[0]!;
 
-  const telemetry = await parseTranscriptTelemetry(target);
+  const config = await readPluginConfig(dataDir);
+  const telemetry = await parseTranscriptTelemetry(target, config.contextWindowLimits);
   if (!telemetry) {
     return {
       activeConversationId: target.conversationId,

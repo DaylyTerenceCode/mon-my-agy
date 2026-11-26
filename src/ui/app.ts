@@ -137,7 +137,8 @@ function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
   const t = snapshot.telemetry;
   const status = snapshot.statusLevel;
   const pct = t.utilizationPct;
-  const barWidth = pct !== null ? Math.min(100, Math.max(0, pct)) : 100;
+  const hasLimit = t.limit !== null && pct !== null;
+  const barWidth = hasLimit ? Math.min(100, Math.max(0, pct)) : 0;
   const { label: statusLabel, barColor } = STATUS_META[status];
   const statusClass = `status-${status}`;
 
@@ -145,13 +146,14 @@ function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
   modelEl.textContent = t.model;
   modelEl.setAttribute('title', t.model);
 
-  const usageSummary =
-    t.limit !== null && pct !== null
-      ? `${formatFull(t.contextUsage)} / ${formatFull(t.limit)} (${pct.toFixed(1)}%)`
-      : `${formatFull(t.contextUsage)} TOKENS (LIMIT_UNKNOWN)`;
+  const usageSummary = hasLimit
+    ? `${formatFull(t.contextUsage)} / ${formatFull(t.limit!)} (${pct!.toFixed(1)}%)`
+    : `${formatFull(t.contextUsage)} TOKENS (LIMIT_UNKNOWN)`;
 
   const remainingText =
-    t.remainingTokens !== null ? `FREE: ${formatFull(t.remainingTokens)}` : 'CFG: config.json';
+    hasLimit && t.remainingTokens !== null
+      ? `FREE: ${formatFull(t.remainingTokens)}`
+      : 'CFG: config.json';
 
   primaryEl.innerHTML = `
     <div class="primary-metrics">
@@ -159,8 +161,8 @@ function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
         <span class="metrics-label">CTX_WINDOW</span>
         <span class="metrics-value tabular-nums ${statusClass}">${usageSummary}</span>
       </div>
-      <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct !== null ? Math.round(barWidth) : 0}">
-        <div class="bar-fill" style="width:${barWidth}%; background:${barColor};${pct === null ? ' opacity:0.45;' : ''}"></div>
+      <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${hasLimit ? Math.round(barWidth) : 0}">
+        <div class="bar-fill" style="width:${barWidth}%; background:${barColor};"></div>
       </div>
       <div class="metrics-meta tabular-nums">
         <span>STATUS: <strong class="${statusClass}">${statusLabel}</strong></span>

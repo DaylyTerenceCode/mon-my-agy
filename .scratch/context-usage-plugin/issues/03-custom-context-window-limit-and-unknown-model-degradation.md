@@ -4,9 +4,9 @@
 
 **Blocked by:** 01: 端到端骨架：Hook 會話索引、MCP Server 與基礎 Context Usage 面板
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] **Context Window Limit** 解析嚴格遵循優先級：先讀取 `${PLUGIN_DATA}/config.json` 的覆蓋映射（支持模型名稱精確匹配或標準化前綴匹配，僅接受正整數），未命中則回退內置查找表，均未命中則返回 `null`。
-- [ ] 當 `config.json` 缺失、為空、局部字段無效或存在 JSON 語法錯誤時，MCP Server 安全回退至默認內置表且不影響啟動或查詢。
-- [ ] 當快照返回 `limit: null`（未知模型）時，面板渲染 `上限未知`（`unknown`）狀態：顯示 `已用 TOKENS (LIMIT_UNKNOWN)`、`0%` 水位條與 `CFG: config.json` 提示，且不顯示無意義的百分比或負值剩餘量。
-- [ ] 後端協議測試覆蓋 `config.json` 自定義上限覆蓋、非法配置安全回退與未知模型返回 `limit: null`；前端 `postMessage` 邊界測試覆蓋未知模型降級渲染。
+- [x] **Context Window Limit** 解析嚴格遵循優先級：先讀取 `${PLUGIN_DATA}/config.json` 的覆蓋映射（支持模型名稱精確匹配或標準化前綴匹配，僅接受正整數），未命中則回退內置查找表，均未命中則返回 `null`。
+- [x] 當 `config.json` 缺失、為空、局部字段無效或存在 JSON 語法錯誤時，MCP Server 安全回退至默認內置表且不影響啟動或查詢。
+- [x] 當快照返回 `limit: null`（未知模型）時，面板渲染 `上限未知`（`unknown`）狀態：顯示 `已用 TOKENS (LIMIT_UNKNOWN)`、`0%` 水位條與 `CFG: config.json` 提示，且不顯示無意義的百分比或負值剩餘量。
+- [x] 後端協議測試覆蓋 `config.json` 自定義上限覆蓋、非法配置安全回退與未知模型返回 `limit: null`；前端 `postMessage` 邊界測試覆蓋未知模型降級渲染。

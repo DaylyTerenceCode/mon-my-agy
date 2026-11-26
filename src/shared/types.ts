@@ -1,4 +1,9 @@
 export const INDEX_FILENAME = 'index.json';
+export const CONFIG_FILENAME = 'config.json';
+
+export interface PluginConfig {
+  contextWindowLimits?: Record<string, number>;
+}
 
 export type StatusLevel = 'empty' | 'unknown' | 'normal' | 'warning' | 'critical';
 

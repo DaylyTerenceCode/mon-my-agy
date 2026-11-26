@@ -27,27 +27,79 @@ const BUILTIN_CONTEXT_WINDOW_LIMITS: ReadonlyArray<readonly [string, number]> = 
   ['o3', 200_000],
 ];
 
+export function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function matchesNormalizedPrefix(normalizedModel: string, normalizedPrefix: string): boolean {
+  return (
+    normalizedModel === normalizedPrefix ||
+    normalizedModel.startsWith(`${normalizedPrefix}-`) ||
+    normalizedModel.startsWith(`${normalizedPrefix}:`) ||
+    normalizedModel.startsWith(`${normalizedPrefix}@`) ||
+    normalizedModel.startsWith(`${normalizedPrefix}/`)
+  );
+}
+
+function normalizeModelName(modelName: string): string | null {
+  const normalized = modelName.trim().toLowerCase();
+  if (!normalized || normalized === 'auto') {
+    return null;
+  }
+  return normalized;
+}
+
+function matchBuiltinLimit(normalizedModel: string): number | null {
+  for (const [prefix, limit] of BUILTIN_CONTEXT_WINDOW_LIMITS) {
+    if (matchesNormalizedPrefix(normalizedModel, prefix)) {
+      return limit;
+    }
+  }
+  return null;
+}
+
 /**
  * Resolves the built-in Context Window Limit for a model name.
  * Returns null if the model is not recognized (triggering unknown-model degradation).
  */
 export function resolveBuiltinContextWindowLimit(modelName: string): number | null {
-  const normalized = modelName.trim().toLowerCase();
-  if (!normalized || normalized === 'auto') {
+  const normalized = normalizeModelName(modelName);
+  return normalized ? matchBuiltinLimit(normalized) : null;
+}
+
+/**
+ * Resolves the Context Window Limit with priority:
+ * 1. User overrides from PLUGIN_DATA/config.json (exact match, then longest normalized prefix match; positive integers only)
+ * 2. Built-in lookup table
+ * 3. null (triggers unknown-model degradation)
+ */
+export function resolveContextWindowLimit(
+  modelName: string,
+  customLimits?: Record<string, number>,
+): number | null {
+  const normalized = normalizeModelName(modelName);
+  if (!normalized) {
     return null;
   }
 
-  for (const [prefix, limit] of BUILTIN_CONTEXT_WINDOW_LIMITS) {
-    if (
-      normalized === prefix ||
-      normalized.startsWith(`${prefix}-`) ||
-      normalized.startsWith(`${prefix}:`) ||
-      normalized.startsWith(`${prefix}@`) ||
-      normalized.startsWith(`${prefix}/`)
-    ) {
-      return limit;
+  if (customLimits) {
+    const validEntries: Array<[string, number]> = [];
+    for (const [rawKey, rawValue] of Object.entries(customLimits)) {
+      const normalizedKey = rawKey.trim().toLowerCase();
+      if (!normalizedKey || !isPositiveInteger(rawValue)) continue;
+      if (normalizedKey === normalized) {
+        return rawValue;
+      }
+      validEntries.push([normalizedKey, rawValue]);
+    }
+
+    validEntries.sort((a, b) => b[0].length - a[0].length);
+    for (const [prefix, limit] of validEntries) {
+      if (matchesNormalizedPrefix(normalized, prefix)) {
+        return limit;
+      }
     }
   }
 
-  return null;
+  return matchBuiltinLimit(normalized);
 }
