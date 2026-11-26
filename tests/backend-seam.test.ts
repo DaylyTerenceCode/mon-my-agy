@@ -146,13 +146,13 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       expect(snapshot.statusLevel).toBe('normal');
       expect(snapshot.telemetry).toEqual({
         model: 'gemini-4-neon-medium',
-        limit: 200000,
+        limit: 524288,
         uncachedInput: 10649,
         cacheRead: 31339,
         output: 627,
         contextUsage: 42615,
-        utilizationPct: expect.closeTo(21.3075, 4),
-        remainingTokens: 157385,
+        utilizationPct: expect.closeTo(8.1282, 4),
+        remainingTokens: 481673,
         cacheHitRate: expect.closeTo(74.638, 3),
         cumulative: {
           uncachedInput: 25649,
@@ -175,9 +175,9 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         source: 'MODEL',
         type: 'PLANNER_RESPONSE',
         model: 'gemini-4-neon-medium',
-        input_tokens: 24800,
-        cache_read_tokens: 128400,
-        output_tokens: 2800,
+        input_tokens: 60000,
+        cache_read_tokens: 330000,
+        output_tokens: 3216,
       }) + '\n',
       'utf8',
     );
@@ -196,8 +196,8 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       let res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
       let snapshot = res.structuredContent as unknown as TelemetrySnapshot;
       expect(snapshot.statusLevel).toBe('warning');
-      expect(snapshot.telemetry?.contextUsage).toBe(156000);
-      expect(snapshot.telemetry?.remainingTokens).toBe(44000);
+      expect(snapshot.telemetry?.contextUsage).toBe(393216);
+      expect(snapshot.telemetry?.remainingTokens).toBe(131072);
 
       const criticalTranscript = path.join(tmpDir, 'critical.jsonl');
       await fs.writeFile(
@@ -207,9 +207,9 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
           source: 'MODEL',
           type: 'PLANNER_RESPONSE',
           model: 'gemini-4-neon-medium',
-          input_tokens: 18500,
-          cache_read_tokens: 164200,
-          output_tokens: 3300,
+          input_tokens: 50000,
+          cache_read_tokens: 418000,
+          output_tokens: 4000,
         }) + '\n',
         'utf8',
       );
@@ -227,8 +227,8 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       snapshot = res.structuredContent as unknown as TelemetrySnapshot;
       expect(snapshot.activeConversationId).toBe('conv-crit');
       expect(snapshot.statusLevel).toBe('critical');
-      expect(snapshot.telemetry?.contextUsage).toBe(186000);
-      expect(snapshot.telemetry?.remainingTokens).toBe(14000);
+      expect(snapshot.telemetry?.contextUsage).toBe(472000);
+      expect(snapshot.telemetry?.remainingTokens).toBe(52288);
     } finally {
       await close();
     }
@@ -583,14 +583,14 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       await fs.writeFile(configPath, '{invalid-json', 'utf8');
       let res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
       let snapshot = res.structuredContent as unknown as TelemetrySnapshot;
-      expect(snapshot.telemetry?.limit).toBe(200000);
+      expect(snapshot.telemetry?.limit).toBe(524288);
       expect(snapshot.statusLevel).toBe('normal');
 
       // 2. Empty file
       await fs.writeFile(configPath, '', 'utf8');
       res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
       snapshot = res.structuredContent as unknown as TelemetrySnapshot;
-      expect(snapshot.telemetry?.limit).toBe(200000);
+      expect(snapshot.telemetry?.limit).toBe(524288);
 
       // 3. Invalid per-model values (negative, zero, float, string) ignored while valid siblings still work
       await fs.writeFile(
@@ -608,7 +608,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       );
       res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
       snapshot = res.structuredContent as unknown as TelemetrySnapshot;
-      expect(snapshot.telemetry?.limit).toBe(200000);
+      expect(snapshot.telemetry?.limit).toBe(524288);
 
       // Verify float/string entries are rejected (degrade to unknown) while valid-custom works
       const floatTranscript = path.join(tmpDir, 'float-model.jsonl');
@@ -688,9 +688,9 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       JSON.stringify({
         step_index: 1,
         model: 'gemini-4-neon-medium',
-        input_tokens: 20000,
-        cache_read_tokens: 165000,
-        output_tokens: 1000,
+        input_tokens: 50000,
+        cache_read_tokens: 418000,
+        output_tokens: 4000,
       }) + '\n',
       'utf8',
     );
@@ -748,7 +748,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         'conv-old',
       ]);
       expect(defaultSnapshot.activeConversationId).toBe('conv-new');
-      expect(defaultSnapshot.telemetry?.contextUsage).toBe(186000);
+      expect(defaultSnapshot.telemetry?.contextUsage).toBe(472000);
       expect(defaultSnapshot.statusLevel).toBe('critical');
 
       // 3. Query by specific conversationId returns that conversation's telemetry while keeping full sorted list
@@ -774,7 +774,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       });
       const fallbackSnapshot = fallbackRes.structuredContent as unknown as TelemetrySnapshot;
       expect(fallbackSnapshot.activeConversationId).toBe('conv-new');
-      expect(fallbackSnapshot.telemetry?.contextUsage).toBe(186000);
+      expect(fallbackSnapshot.telemetry?.contextUsage).toBe(472000);
     } finally {
       await close();
     }

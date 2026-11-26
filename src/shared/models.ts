@@ -3,8 +3,10 @@
  * Ordered from most specific prefixes to general prefixes.
  */
 const BUILTIN_CONTEXT_WINDOW_LIMITS: ReadonlyArray<readonly [string, number]> = [
-  // Gemini 4 / Neon series
-  ['gemini-4-neon', 200_000],
+  // Gemini 4 series
+  ['gemini-4-neon', 524_288],
+  ['gemini-4-carbon', 524_288],
+  ['gemini-4-hydrogen', 524_288],
   // Gemini 2.5 / 2.0 / 1.5 series
   ['gemini-2.5-pro', 1_000_000],
   ['gemini-2.5-flash', 1_000_000],
