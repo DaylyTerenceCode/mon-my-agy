@@ -2,6 +2,7 @@ import * as esbuild from 'esbuild';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { syncLocalPlugin } from './sync-plugin.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -59,6 +60,8 @@ async function build() {
 
   await fs.writeFile(path.join(distDir, 'app.html'), finalHtml, 'utf8');
   console.log('Built dist/hook.mjs, dist/server.mjs, dist/app.html');
+
+  await syncLocalPlugin({ createIfMissing: false });
 }
 
 build().catch((err) => {
