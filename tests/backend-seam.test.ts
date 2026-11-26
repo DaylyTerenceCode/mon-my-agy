@@ -8,7 +8,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { runHookIndexer } from '../src/hook/index-conversation.js';
-import { createMcpServer, APP_RESOURCE_URI, ENTRYPOINT_TOOL_NAME } from '../src/server/mcp-server.js';
+import {
+  createMcpServer,
+  APP_RESOURCE_URI,
+  ENTRYPOINT_TOOL_NAME,
+  APP_QUERY_TOOL_NAME,
+} from '../src/server/mcp-server.js';
 import type { TelemetrySnapshot } from '../src/shared/types.js';
 
 const builtAppHtmlPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/app.html');
@@ -623,6 +628,130 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       expect(snapshot.telemetry?.limit).toBe(80000);
       expect(snapshot.telemetry?.utilizationPct).toBeCloseTo(50.0, 4);
       expect(snapshot.statusLevel).toBe('normal');
+    } finally {
+      await close();
+    }
+  });
+
+  it('exposes app-only query tool (visibility: ["app"]) supporting descending lastActiveAt sorting and conversationId lookup', async () => {
+    const tOld = path.join(tmpDir, 'conv-old.jsonl');
+    const tMid = path.join(tmpDir, 'conv-mid.jsonl');
+    const tNew = path.join(tmpDir, 'conv-new.jsonl');
+
+    await fs.writeFile(
+      tOld,
+      JSON.stringify({
+        step_index: 1,
+        model: 'gemini-4-neon-medium',
+        input_tokens: 10000,
+        cache_read_tokens: 5000,
+        output_tokens: 500,
+      }) + '\n',
+      'utf8',
+    );
+    await fs.writeFile(
+      tMid,
+      JSON.stringify({
+        step_index: 1,
+        model: 'claude-sonnet-4-20250514',
+        input_tokens: 40000,
+        cache_read_tokens: 110000,
+        output_tokens: 6000,
+      }) + '\n',
+      'utf8',
+    );
+    await fs.writeFile(
+      tNew,
+      JSON.stringify({
+        step_index: 1,
+        model: 'gemini-4-neon-medium',
+        input_tokens: 20000,
+        cache_read_tokens: 165000,
+        output_tokens: 1000,
+      }) + '\n',
+      'utf8',
+    );
+
+    // Write index with intentionally unsorted lastActiveAt timestamps to verify descending sort
+    await fs.mkdir(pluginDataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginDataDir, 'index.json'),
+      JSON.stringify({
+        version: 1,
+        conversations: [
+          {
+            conversationId: 'conv-old',
+            modelName: 'gemini-4-neon-medium',
+            transcriptPath: tOld,
+            title: 'Oldest Session',
+            lastActiveAt: '2026-11-26T01:00:00.000Z',
+          },
+          {
+            conversationId: 'conv-new',
+            modelName: 'gemini-4-neon-medium',
+            transcriptPath: tNew,
+            title: 'Newest Session',
+            lastActiveAt: '2026-11-26T03:00:00.000Z',
+          },
+          {
+            conversationId: 'conv-mid',
+            modelName: 'claude-sonnet-4-20250514',
+            transcriptPath: tMid,
+            title: 'Middle Session',
+            lastActiveAt: '2026-11-26T02:00:00.000Z',
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    const { client, close } = await connectClient(pluginDataDir);
+    try {
+      // 1. Tool metadata declares visibility: ["app"] (hidden from model)
+      const { tools } = await client.listTools();
+      const queryTool = tools.find((t) => t.name === APP_QUERY_TOOL_NAME);
+      expect(queryTool).toBeDefined();
+      const meta = queryTool?._meta as Record<string, unknown> | undefined;
+      const uiMeta = meta?.ui as { visibility?: string[] } | undefined;
+      expect(uiMeta?.visibility).toEqual(['app']);
+
+      // 2. Default call ({}) returns conversations sorted descending by lastActiveAt and newest telemetry
+      const defaultRes = await client.callTool({ name: APP_QUERY_TOOL_NAME, arguments: {} });
+      expect(defaultRes.isError).toBeFalsy();
+      const defaultSnapshot = defaultRes.structuredContent as unknown as TelemetrySnapshot;
+      expect(defaultSnapshot.conversations.map((c) => c.conversationId)).toEqual([
+        'conv-new',
+        'conv-mid',
+        'conv-old',
+      ]);
+      expect(defaultSnapshot.activeConversationId).toBe('conv-new');
+      expect(defaultSnapshot.telemetry?.contextUsage).toBe(186000);
+      expect(defaultSnapshot.statusLevel).toBe('critical');
+
+      // 3. Query by specific conversationId returns that conversation's telemetry while keeping full sorted list
+      const midRes = await client.callTool({
+        name: APP_QUERY_TOOL_NAME,
+        arguments: { conversationId: 'conv-mid' },
+      });
+      const midSnapshot = midRes.structuredContent as unknown as TelemetrySnapshot;
+      expect(midSnapshot.activeConversationId).toBe('conv-mid');
+      expect(midSnapshot.conversations.map((c) => c.conversationId)).toEqual([
+        'conv-new',
+        'conv-mid',
+        'conv-old',
+      ]);
+      expect(midSnapshot.telemetry?.model).toBe('claude-sonnet-4-20250514');
+      expect(midSnapshot.telemetry?.contextUsage).toBe(156000);
+      expect(midSnapshot.statusLevel).toBe('warning');
+
+      // 4. Query with unknown conversationId falls back safely to the most recently active conversation
+      const fallbackRes = await client.callTool({
+        name: APP_QUERY_TOOL_NAME,
+        arguments: { conversationId: 'conv-does-not-exist' },
+      });
+      const fallbackSnapshot = fallbackRes.structuredContent as unknown as TelemetrySnapshot;
+      expect(fallbackSnapshot.activeConversationId).toBe('conv-new');
+      expect(fallbackSnapshot.telemetry?.contextUsage).toBe(186000);
     } finally {
       await close();
     }

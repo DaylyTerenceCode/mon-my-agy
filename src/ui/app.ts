@@ -4,10 +4,17 @@ import {
   applyHostStyleVariables,
   type McpUiHostContext,
 } from '@modelcontextprotocol/ext-apps';
-import type { ConversationTelemetry, StatusLevel, TelemetrySnapshot } from '../shared/types.js';
+import {
+  APP_QUERY_TOOL_NAME,
+  type ConversationSummary,
+  type ConversationTelemetry,
+  type StatusLevel,
+  type TelemetrySnapshot,
+} from '../shared/types.js';
 
 const EMPTY_GUIDANCE =
   '尚無已記錄的對話數據。完成一次對話回覆後將自動顯示 Context Usage。';
+const POLL_INTERVAL_MS = 3000;
 
 function formatFull(n: number): string {
   return Math.max(0, Math.floor(n)).toLocaleString('en-US');
@@ -19,6 +26,44 @@ function formatCompact(n: number): string {
 }
 
 let showCumulative = true;
+let selectedConversationId: string | undefined;
+let isFetching = false;
+let pendingRequest: { conversationId?: string } | null = null;
+let pollTimerId: number | null = null;
+let appInstance: App | null = null;
+
+function renderConversationSwitcher(
+  conversations: ConversationSummary[],
+  activeConversationId: string | null,
+): void {
+  const convBar = document.getElementById('convBar');
+  const convSelect = document.getElementById('convSelect') as HTMLSelectElement | null;
+  if (!convBar || !convSelect) return;
+
+  if (conversations.length === 0) {
+    convBar.classList.add('hidden');
+    convSelect.innerHTML = '';
+    return;
+  }
+
+  convBar.classList.remove('hidden');
+  convSelect.innerHTML = '';
+  for (const conv of conversations) {
+    const opt = document.createElement('option');
+    opt.value = conv.conversationId;
+    opt.textContent = conv.title || conv.conversationId;
+    convSelect.appendChild(opt);
+  }
+
+  if (
+    activeConversationId &&
+    conversations.some((c) => c.conversationId === activeConversationId)
+  ) {
+    convSelect.value = activeConversationId;
+  } else {
+    convSelect.value = conversations[0]!.conversationId;
+  }
+}
 
 function syncCumulativeVisibility(): void {
   const toggleBtn = document.getElementById('toggleCumulativeBtn');
@@ -121,6 +166,11 @@ function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
     return;
   }
 
+  renderConversationSwitcher(
+    snapshot?.conversations ?? [],
+    snapshot?.activeConversationId ?? null,
+  );
+
   if (!snapshot || !snapshot.telemetry || snapshot.statusLevel === 'empty') {
     dotEl.setAttribute('data-status', 'empty');
     modelEl.textContent = 'waiting';
@@ -186,6 +236,71 @@ function extractSnapshot(structuredContent: unknown): TelemetrySnapshot | null {
   return candidate as TelemetrySnapshot;
 }
 
+async function requestSnapshot(
+  conversationId?: string,
+  queueIfBusy = false,
+): Promise<void> {
+  if (!appInstance) return;
+  if (isFetching) {
+    if (queueIfBusy) {
+      pendingRequest = { conversationId };
+    }
+    return;
+  }
+
+  isFetching = true;
+  const refreshBtn = document.getElementById('refreshBtn');
+  refreshBtn?.setAttribute('aria-busy', 'true');
+
+  try {
+    const args: Record<string, unknown> = conversationId ? { conversationId } : {};
+    const result = await appInstance.callServerTool({
+      name: APP_QUERY_TOOL_NAME,
+      arguments: args,
+    });
+    const snapshot = extractSnapshot(result.structuredContent);
+    // Avoid overwriting the UI with a stale response when a newer user request is queued
+    if (snapshot && pendingRequest === null) {
+      renderSnapshot(snapshot);
+    }
+  } catch (err) {
+    console.error('[mon-my-agy] Failed to fetch telemetry snapshot:', err);
+  } finally {
+    isFetching = false;
+    refreshBtn?.removeAttribute('aria-busy');
+
+    if (pendingRequest !== null) {
+      const nextRequest = pendingRequest;
+      pendingRequest = null;
+      void requestSnapshot(nextRequest.conversationId, false);
+    }
+  }
+}
+
+function startPolling(): void {
+  if (document.hidden || pollTimerId !== null) return;
+  pollTimerId = window.setInterval(() => {
+    if (!document.hidden) {
+      void requestSnapshot(selectedConversationId, false);
+    }
+  }, POLL_INTERVAL_MS);
+}
+
+function stopPolling(): void {
+  if (pollTimerId !== null) {
+    window.clearInterval(pollTimerId);
+    pollTimerId = null;
+  }
+}
+
+function syncPollingState(): void {
+  if (document.hidden) {
+    stopPolling();
+  } else {
+    startPolling();
+  }
+}
+
 async function bootstrap(): Promise<void> {
   const toggleCumulativeBtn = document.getElementById('toggleCumulativeBtn');
   if (toggleCumulativeBtn) {
@@ -195,7 +310,23 @@ async function bootstrap(): Promise<void> {
     });
   }
 
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      void requestSnapshot(selectedConversationId, true);
+    });
+  }
+
+  const convSelect = document.getElementById('convSelect') as HTMLSelectElement | null;
+  if (convSelect) {
+    convSelect.addEventListener('change', () => {
+      selectedConversationId = convSelect.value || undefined;
+      void requestSnapshot(selectedConversationId, true);
+    });
+  }
+
   const app = new App({ name: 'Mon-My-Agy', version: '0.1.0' }, {});
+  appInstance = app;
 
   // Register handlers BEFORE connecting so no host notifications are missed
   app.ontoolresult = (result) => {
@@ -209,6 +340,10 @@ async function bootstrap(): Promise<void> {
   try {
     await app.connect();
     applyHostContext(app.getHostContext());
+
+    document.addEventListener('visibilitychange', syncPollingState);
+    window.addEventListener('pagehide', stopPolling);
+    syncPollingState();
   } catch (err) {
     console.error('[mon-my-agy] Failed to connect MCP App:', err);
   }

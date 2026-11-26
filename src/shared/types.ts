@@ -1,5 +1,6 @@
 export const INDEX_FILENAME = 'index.json';
 export const CONFIG_FILENAME = 'config.json';
+export const APP_QUERY_TOOL_NAME = 'get_context_usage';
 
 export interface PluginConfig {
   contextWindowLimits?: Record<string, number>;

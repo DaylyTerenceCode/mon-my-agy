@@ -6,10 +6,11 @@ import {
 } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { readTelemetrySnapshot } from './store.js';
-import type { TelemetrySnapshot } from '../shared/types.js';
+import { APP_QUERY_TOOL_NAME, type TelemetrySnapshot } from '../shared/types.js';
 
 export const APP_RESOURCE_URI = 'ui://mon-my-agy/context-usage.html';
 export const ENTRYPOINT_TOOL_NAME = 'open_context_usage';
+export { APP_QUERY_TOOL_NAME };
 
 export interface CreateMcpServerOptions {
   dataDir: string;
@@ -65,6 +66,19 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
     },
   );
 
+  async function handleTelemetryQuery(conversationId?: string) {
+    const snapshot = await readTelemetrySnapshot(options.dataDir, conversationId);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: formatSummaryText(snapshot),
+        },
+      ],
+      structuredContent: snapshot as unknown as Record<string, unknown>,
+    };
+  }
+
   registerAppTool(
     server,
     ENTRYPOINT_TOOL_NAME,
@@ -88,18 +102,26 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
         },
       },
     },
-    async (args) => {
-      const snapshot = await readTelemetrySnapshot(options.dataDir, args.conversationId);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: formatSummaryText(snapshot),
-          },
-        ],
-        structuredContent: snapshot as unknown as Record<string, unknown>,
-      };
+    async (args) => handleTelemetryQuery(args.conversationId),
+  );
+
+  registerAppTool(
+    server,
+    APP_QUERY_TOOL_NAME,
+    {
+      title: 'Refresh Context Usage',
+      description: 'App-only tool to fetch the latest Context Usage telemetry snapshot and recent conversations.',
+      inputSchema: {
+        conversationId: z.string().optional().describe('Optional conversation ID to inspect'),
+      },
+      _meta: {
+        ui: {
+          resourceUri: APP_RESOURCE_URI,
+          visibility: ['app'],
+        },
+      },
     },
+    async (args) => handleTelemetryQuery(args.conversationId),
   );
 
   return server;

@@ -3,24 +3,45 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
-import type { TelemetrySnapshot } from '../src/shared/types.js';
+import { APP_QUERY_TOOL_NAME, type TelemetrySnapshot } from '../src/shared/types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const builtHtmlPath = path.resolve(__dirname, '../dist/app.html');
 
+interface ToolCallRecord {
+  name: string;
+  arguments?: Record<string, unknown>;
+}
+
+interface MountOptions {
+  initialHidden?: boolean;
+  onToolCall?: (
+    call: ToolCallRecord,
+  ) => TelemetrySnapshot | Promise<TelemetrySnapshot>;
+}
+
 interface MountedApp {
   dom: JSDOM;
+  toolCalls: ToolCallRecord[];
   sendToolResult: (snapshot: TelemetrySnapshot) => Promise<void>;
+  setHidden: (hidden: boolean) => void;
+  advanceIntervals: () => Promise<void>;
+  activeIntervalCount: () => number;
   close: () => void;
 }
 
-async function mountBuiltApp(): Promise<MountedApp> {
+async function mountBuiltApp(options: MountOptions = {}): Promise<MountedApp> {
   const html = await fs.readFile(builtHtmlPath, 'utf8');
 
   let resolveInitialized!: () => void;
   const initialized = new Promise<void>((resolve) => {
     resolveInitialized = resolve;
   });
+
+  const toolCalls: ToolCallRecord[] = [];
+  let hiddenState = options.initialHidden ?? false;
+  let nextIntervalId = 1;
+  const activeIntervals = new Map<number, () => void>();
 
   const dom = new JSDOM(html, {
     url: 'https://mon-my-agy.mcp-app.local/',
@@ -33,6 +54,31 @@ async function mountBuiltApp(): Promise<MountedApp> {
         unobserve() {}
         disconnect() {}
       };
+
+      // Controllable document visibility for testing visible-only polling
+      Object.defineProperty(win.document, 'hidden', {
+        get: () => hiddenState,
+        configurable: true,
+      });
+      Object.defineProperty(win.document, 'visibilityState', {
+        get: () => (hiddenState ? 'hidden' : 'visible'),
+        configurable: true,
+      });
+
+      // Deterministic interval harness (captures window.setInterval/clearInterval without real waits)
+      win.setInterval = ((handler: TimerHandler) => {
+        const id = nextIntervalId++;
+        if (typeof handler === 'function') {
+          activeIntervals.set(id, handler as () => void);
+        }
+        return id;
+      }) as unknown as typeof win.setInterval;
+
+      win.clearInterval = ((id?: number) => {
+        if (typeof id === 'number') {
+          activeIntervals.delete(id);
+        }
+      }) as unknown as typeof win.clearInterval;
 
       const hostParent = {
         postMessage(message: unknown) {
@@ -83,6 +129,40 @@ async function mountBuiltApp(): Promise<MountedApp> {
             });
           } else if (msg.method === 'ui/notifications/initialized') {
             resolveInitialized();
+          } else if (msg.method === 'tools/call' && msg.id !== undefined) {
+            const record: ToolCallRecord = {
+              name: String(msg.params?.name ?? ''),
+              arguments: msg.params?.arguments as Record<string, unknown> | undefined,
+            };
+            toolCalls.push(record);
+            const requestId = msg.id;
+            const respond = (snapshot: TelemetrySnapshot) => {
+              win.dispatchEvent(
+                new win.MessageEvent('message', {
+                  data: {
+                    jsonrpc: '2.0',
+                    id: requestId,
+                    result: {
+                      content: [{ type: 'text', text: 'snapshot' }],
+                      structuredContent: snapshot,
+                    },
+                  },
+                  source: hostParent as unknown as Window,
+                }),
+              );
+            };
+            if (options.onToolCall) {
+              Promise.resolve(options.onToolCall(record)).then(respond);
+            } else {
+              queueMicrotask(() =>
+                respond({
+                  activeConversationId: null,
+                  conversations: [],
+                  telemetry: null,
+                  statusLevel: 'empty',
+                }),
+              );
+            }
           }
         },
       };
@@ -95,9 +175,12 @@ async function mountBuiltApp(): Promise<MountedApp> {
   });
 
   await initialized;
+  // Allow post-connect microtasks (e.g., starting visibility-aware polling) to settle
+  await new Promise((r) => setTimeout(r, 10));
 
   return {
     dom,
+    toolCalls,
     async sendToolResult(snapshot: TelemetrySnapshot) {
       const win = dom.window;
       win.dispatchEvent(
@@ -115,7 +198,21 @@ async function mountBuiltApp(): Promise<MountedApp> {
       );
       await new Promise((r) => setTimeout(r, 10));
     },
+    setHidden(hidden: boolean) {
+      hiddenState = hidden;
+      dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
+    },
+    async advanceIntervals() {
+      for (const cb of [...activeIntervals.values()]) {
+        cb();
+      }
+      await new Promise((r) => setTimeout(r, 15));
+    },
+    activeIntervalCount() {
+      return activeIntervals.size;
+    },
     close() {
+      activeIntervals.clear();
       dom.window.close();
     },
   };
@@ -481,5 +578,253 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     expect(doc.getElementById('modBreakdown')?.textContent).toContain('77.4%');
     expect(doc.getElementById('modCumulative')?.classList.contains('hidden')).toBe(false);
     expect(doc.getElementById('modCumulative')?.textContent).toContain('220.6k tokens');
+  });
+
+  it('triggers app-only query tool on manual Refresh button click and updates view', async () => {
+    const refreshedSnapshot: TelemetrySnapshot = {
+      activeConversationId: 'conv-refreshed',
+      conversations: [
+        {
+          conversationId: 'conv-refreshed',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Refreshed Session',
+          lastActiveAt: '2026-11-26T05:00:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 20000,
+        cacheRead: 80000,
+        output: 2000,
+        contextUsage: 102000,
+        utilizationPct: 51.0,
+        remainingTokens: 98000,
+        cacheHitRate: 80.0,
+        cumulative: { uncachedInput: 30000, cacheRead: 120000, output: 4000, total: 154000 },
+      },
+      statusLevel: 'normal',
+    };
+
+    const app = await mountBuiltApp({
+      onToolCall: () => refreshedSnapshot,
+    });
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    const refreshBtn = doc.getElementById('refreshBtn') as HTMLButtonElement | null;
+    expect(refreshBtn).not.toBeNull();
+    expect(refreshBtn?.getAttribute('title')).toBe('Refresh');
+    expect(refreshBtn?.getAttribute('aria-label')).toBe('Refresh');
+    expect(refreshBtn?.querySelector('svg')).not.toBeNull();
+
+    refreshBtn?.click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(app.toolCalls).toEqual([{ name: APP_QUERY_TOOL_NAME, arguments: {} }]);
+    expect(doc.getElementById('modPrimary')?.textContent).toContain('102,000 / 200,000 (51.0%)');
+    expect(doc.getElementById('modBreakdown')?.textContent).toContain('80.0%');
+  });
+
+  it('hides conversation switcher in empty state and switches conversation via app-only query tool', async () => {
+    const conversations = [
+      {
+        conversationId: 'conv-latest',
+        modelName: 'gemini-4-neon-medium',
+        title: 'Latest Coding Session',
+        lastActiveAt: '2026-11-26T06:00:00Z',
+      },
+      {
+        conversationId: 'conv-prev',
+        modelName: 'claude-sonnet-4-20250514',
+        title: 'Previous Review Session',
+        lastActiveAt: '2026-11-26T05:00:00Z',
+      },
+    ];
+
+    const prevSnapshot: TelemetrySnapshot = {
+      activeConversationId: 'conv-prev',
+      conversations,
+      telemetry: {
+        model: 'claude-sonnet-4-20250514',
+        limit: 200000,
+        uncachedInput: 30000,
+        cacheRead: 120000,
+        output: 6000,
+        contextUsage: 156000,
+        utilizationPct: 78.0,
+        remainingTokens: 44000,
+        cacheHitRate: 80.0,
+        cumulative: { uncachedInput: 50000, cacheRead: 200000, output: 10000, total: 260000 },
+      },
+      statusLevel: 'warning',
+    };
+
+    const app = await mountBuiltApp({
+      onToolCall: (call) => {
+        if (call.arguments?.conversationId === 'conv-prev') {
+          return prevSnapshot;
+        }
+        return {
+          activeConversationId: 'conv-latest',
+          conversations,
+          telemetry: null,
+          statusLevel: 'empty',
+        };
+      },
+    });
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    // 1. Empty state hides conversation switcher
+    await app.sendToolResult({
+      activeConversationId: null,
+      conversations: [],
+      telemetry: null,
+      statusLevel: 'empty',
+    });
+    const convBar = doc.getElementById('convBar');
+    const convSelect = doc.getElementById('convSelect') as HTMLSelectElement | null;
+    expect(convBar?.classList.contains('hidden')).toBe(true);
+    expect(convSelect).not.toBeNull();
+
+    // 2. Populated state reveals switcher with options in server order
+    await app.sendToolResult({
+      activeConversationId: 'conv-latest',
+      conversations,
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 10000,
+        cacheRead: 30000,
+        output: 1000,
+        contextUsage: 41000,
+        utilizationPct: 20.5,
+        remainingTokens: 159000,
+        cacheHitRate: 75.0,
+        cumulative: { uncachedInput: 10000, cacheRead: 30000, output: 1000, total: 41000 },
+      },
+      statusLevel: 'normal',
+    });
+
+    expect(convBar?.classList.contains('hidden')).toBe(false);
+    expect(Array.from(convSelect!.options).map((o) => ({ value: o.value, text: o.textContent }))).toEqual([
+      { value: 'conv-latest', text: 'Latest Coding Session' },
+      { value: 'conv-prev', text: 'Previous Review Session' },
+    ]);
+    expect(convSelect!.value).toBe('conv-latest');
+
+    // 3. Changing dropdown triggers callServerTool with selected conversationId and updates all modules
+    convSelect!.value = 'conv-prev';
+    convSelect!.dispatchEvent(new app.dom.window.Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(app.toolCalls).toEqual([
+      { name: APP_QUERY_TOOL_NAME, arguments: { conversationId: 'conv-prev' } },
+    ]);
+    expect(doc.getElementById('headerDot')?.getAttribute('data-status')).toBe('warning');
+    expect(doc.getElementById('modelBadge')?.textContent?.trim()).toBe('claude-sonnet-4-20250514');
+    expect(doc.getElementById('modPrimary')?.textContent).toContain('156,000 / 200,000 (78.0%)');
+    expect(doc.getElementById('modCumulative')?.textContent).toContain('260.0k tokens');
+  });
+
+  it('polls only while page is visible and enforces single-in-flight request constraint', async () => {
+    let resolveFirstPoll!: (snapshot: TelemetrySnapshot) => void;
+    let pollCount = 0;
+
+    const app = await mountBuiltApp({
+      onToolCall: () => {
+        pollCount += 1;
+        if (pollCount === 1) {
+          return new Promise<TelemetrySnapshot>((resolve) => {
+            resolveFirstPoll = resolve;
+          });
+        }
+        return {
+          activeConversationId: 'conv-poll-2',
+          conversations: [
+            {
+              conversationId: 'conv-poll-2',
+              modelName: 'gemini-4-neon-medium',
+              title: 'Polled Session',
+              lastActiveAt: '2026-11-26T06:05:00Z',
+            },
+          ],
+          telemetry: {
+            model: 'gemini-4-neon-medium',
+            limit: 200000,
+            uncachedInput: 50000,
+            cacheRead: 100000,
+            output: 2000,
+            contextUsage: 152000,
+            utilizationPct: 76.0,
+            remainingTokens: 48000,
+            cacheHitRate: 66.666,
+            cumulative: { uncachedInput: 50000, cacheRead: 100000, output: 2000, total: 152000 },
+          },
+          statusLevel: 'warning',
+        };
+      },
+    });
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    // Visible on mount -> polling interval is active
+    expect(app.activeIntervalCount()).toBe(1);
+
+    // First poll tick sends 1 in-flight request
+    await app.advanceIntervals();
+    expect(app.toolCalls.length).toBe(1);
+    expect(app.toolCalls[0]).toEqual({ name: APP_QUERY_TOOL_NAME, arguments: {} });
+
+    // Subsequent ticks while first request is still unresolved MUST NOT fire concurrent requests
+    await app.advanceIntervals();
+    await app.advanceIntervals();
+    expect(app.toolCalls.length).toBe(1);
+
+    // Resolve first in-flight request -> view updates
+    resolveFirstPoll({
+      activeConversationId: 'conv-poll-1',
+      conversations: [
+        {
+          conversationId: 'conv-poll-1',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Polled Session',
+          lastActiveAt: '2026-11-26T06:00:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 10000,
+        cacheRead: 40000,
+        output: 1000,
+        contextUsage: 51000,
+        utilizationPct: 25.5,
+        remainingTokens: 149000,
+        cacheHitRate: 80.0,
+        cumulative: { uncachedInput: 10000, cacheRead: 40000, output: 1000, total: 51000 },
+      },
+      statusLevel: 'normal',
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(doc.getElementById('modPrimary')?.textContent).toContain('51,000 / 200,000 (25.5%)');
+
+    // Now that first request settled, next tick sends a new poll
+    await app.advanceIntervals();
+    expect(app.toolCalls.length).toBe(2);
+    expect(doc.getElementById('modPrimary')?.textContent).toContain('152,000 / 200,000 (76.0%)');
+
+    // Hiding the page stops polling immediately
+    app.setHidden(true);
+    expect(app.activeIntervalCount()).toBe(0);
+    await app.advanceIntervals();
+    expect(app.toolCalls.length).toBe(2);
+
+    // Becoming visible again resumes polling
+    app.setHidden(false);
+    expect(app.activeIntervalCount()).toBe(1);
+    await app.advanceIntervals();
+    expect(app.toolCalls.length).toBeGreaterThanOrEqual(3);
   });
 });

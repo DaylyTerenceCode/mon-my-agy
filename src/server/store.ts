@@ -82,7 +82,11 @@ async function readConversationIndex(dataDir: string): Promise<ConversationIndex
     if (!Array.isArray(parsed.conversations)) return [];
     return parsed.conversations
       .filter(isConversationIndexEntry)
-      .sort((a, b) => Date.parse(b.lastActiveAt) - Date.parse(a.lastActiveAt));
+      .sort((a, b) => {
+        const tb = Date.parse(b.lastActiveAt);
+        const ta = Date.parse(a.lastActiveAt);
+        return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+      });
   } catch {
     return [];
   }

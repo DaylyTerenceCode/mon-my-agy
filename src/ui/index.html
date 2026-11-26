@@ -14,7 +14,25 @@
         <span class="brand-title">Mon-My-Agy</span>
         <span id="modelBadge" class="model-badge" title="waiting">waiting</span>
       </div>
+      <div class="header-actions">
+        <button
+          id="refreshBtn"
+          class="icon-btn"
+          type="button"
+          aria-label="Refresh"
+          title="Refresh"
+        >
+          <svg class="icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M13.25 8a5.25 5.25 0 1 1-1.3-3.45" />
+            <path d="M13.25 2.75v2.5h-2.5" />
+          </svg>
+        </button>
+      </div>
     </header>
+
+    <div id="convBar" class="conv-bar hidden">
+      <select id="convSelect" class="conv-select" aria-label="切換對話"></select>
+    </div>
 
     <div class="pane-body">
       <section id="modPrimary" class="mod-primary" aria-live="polite">
