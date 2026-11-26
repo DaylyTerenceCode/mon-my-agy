@@ -1,548 +1,327 @@
 <!DOCTYPE html>
-<!--
-  PROTOTYPE · THROWAWAY
-  Four variants of the Mon-My-Agy auxiliary side pane, switchable via ?variant=A|B|C|D
-  and the floating bottom bar, mounted inside a mock Antigravity side pane.
-  All data is synthetic. No persistence.
--->
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Mon-My-Agy · UI Prototype v2</title>
-<script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
-<style>
-  .tnum { font-variant-numeric: tabular-nums; }
-  .ease { transition: all .35s cubic-bezier(.2,.8,.2,1); }
-  @keyframes pulse-dot { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
-  .pulse { animation: pulse-dot 1.2s ease-in-out infinite; }
-  .hatch {
-    background-image: repeating-linear-gradient(135deg, transparent 0 5px,
-      color-mix(in srgb, var(--muted-foreground) 25%, transparent) 5px 6px);
-  }
-  .pane-scroll::-webkit-scrollbar { width: 6px; }
-  .pane-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  summary::-webkit-details-marker { display: none; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mon-My-Agy · UI Prototype v3</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    .bar-transition { transition: width 0.3s ease, background-color 0.25s ease; }
+  </style>
 </head>
-<body class="bg-[var(--background)] text-[var(--foreground)] antialiased m-0 p-0">
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased m-0 p-4">
+  <div class="max-w-lg mx-auto space-y-4">
 
-<div class="min-h-[100vh] flex flex-col items-center px-4 pt-5 pb-28">
-  <!-- Caption -->
-  <div class="w-full flex items-center justify-between gap-3 text-xs text-[var(--muted-foreground)] mb-2" id="caption">
-    <span><b class="text-[var(--foreground)]">PROTOTYPE</b> · 示例數據 · 模擬右側輔助面板</span>
-    <span class="flex items-center gap-1">
-      面板寬度
-      <button data-w="360" class="wbtn px-1.5 py-0.5 rounded border border-[var(--border)]">360</button>
-      <button data-w="440" class="wbtn px-1.5 py-0.5 rounded border border-[var(--border)]">440</button>
-      <button data-w="560" class="wbtn px-1.5 py-0.5 rounded border border-[var(--border)]">560</button>
-    </span>
-  </div>
-
-  <!-- Mock Antigravity auxiliary side pane -->
-  <div id="pane" class="ease rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden flex flex-col shadow-sm" style="width:440px;height:700px">
-    <div class="flex items-center gap-1 px-2 h-9 border-b border-[var(--card-border)] text-xs shrink-0">
-      <span class="px-2 py-1 rounded text-[var(--muted-foreground)]">Review</span>
-      <span class="px-2 py-1 rounded text-[var(--muted-foreground)]">Files</span>
-      <span class="px-2 py-1 rounded bg-[var(--secondary)] text-[var(--foreground)] font-medium flex items-center gap-1.5">
-        <span class="w-1.5 h-1.5 rounded-full" id="tab-dot"></span>Mon-My-Agy <span class="text-[var(--muted-foreground)]">×</span>
-      </span>
-    </div>
-    <div id="root" class="pane-scroll flex-1 overflow-y-auto"></div>
-  </div>
-</div>
-
-<!-- Floating prototype switcher (not part of the design) -->
-<div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-2 py-1.5 rounded-full shadow-lg text-xs"
-     style="background:var(--foreground);color:var(--background)">
-  <button id="prev" class="w-7 h-7 rounded-full hover:opacity-70" title="上一個 (←)">‹</button>
-  <span id="vlabel" class="font-semibold min-w-[132px] text-center"></span>
-  <button id="next" class="w-7 h-7 rounded-full hover:opacity-70" title="下一個 (→)">›</button>
-  <span class="w-px h-4 opacity-30" style="background:var(--background)"></span>
-  <span id="scen" class="flex items-center gap-1"></span>
-  <span class="w-px h-4 opacity-30" style="background:var(--background)"></span>
-  <label class="flex items-center gap-1 pr-2 cursor-pointer select-none">
-    <input type="checkbox" id="running" /> 執行中
-  </label>
-</div>
-
-<script>
-/* ---------------- synthetic data ---------------- */
-function rng(seed){ let s = seed; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
-function hhmm(min){ const h = Math.floor(min/60)%24, m = min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
-function genTurns(n, finalUsage, seed, startMin){
-  const r = rng(seed), out = []; let prev = 0;
-  for (let i = 0; i < n; i++){
-    let target = Math.round(finalUsage * Math.pow((i+1)/n, 0.85) * (0.96 + r()*0.08));
-    if (i === n-1) target = finalUsage;
-    if (target <= prev) target = prev + 900;
-    const output = Math.round(350 + r()*2600);
-    const cache  = i === 0 ? Math.round(target*0.55) : Math.round(prev*(0.9 + r()*0.08));
-    const input  = Math.max(250, target - cache - output);
-    const calls  = 2 + Math.floor(r()*5);
-    out.push({ idx:i+1, time:hhmm(startMin + i*4 + Math.floor(r()*3)), cache, input, output, usage:cache+input+output, calls });
-    prev = cache + input + output;
-  }
-  return out;
-}
-const CONVS = ['Antigravity Context Usage Plugin','Matt Pocock Skills Setup','GitHub Skills Search'];
-const SCEN = {
-  normal:   { label:'正常',   model:'claude-opus-5.5',        limit:200000, turns:genTurns(7,  43600, 7,  932) },
-  warning:  { label:'預警',   model:'gemini-4-neon-medium',   limit:200000, turns:genTurns(14,152400, 11, 905) },
-  critical: { label:'危險',   model:'gemini-4-neon-medium',   limit:200000, turns:genTurns(22,182400, 23, 880) },
-  unknown:  { label:'未知模型', model:'custom-experimental-v9', limit:null,   turns:genTurns(5,  43580, 5,  945) },
-};
-
-/* ---------------- state ---------------- */
-const VARIANTS = [
-  { key:'A', name:'儀表盤 Gauge' },
-  { key:'B', name:'回合賬本 Ledger' },
-  { key:'C', name:'容量艙 Capacity' },
-  { key:'D', name:'一眼 Glance' },
-  { key:'E', name:'組合 A+D' },
-];
-const qs = new URLSearchParams(location.search);
-const state = {
-  variant: VARIANTS.some(v => v.key === qs.get('variant')) ? qs.get('variant') : 'E',
-  scenario: 'normal', running: false, compact: 'idle', conv: 0,
-  expanded: new Set(), dOpen: { breakdown:true, trend:false, total:false, eTrend:true, eTotal:true },
-};
-
-/* ---------------- helpers ---------------- */
-const fmtK = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n);
-const fmtN = n => n.toLocaleString('en-US');
-const mix  = (c, p) => `color-mix(in srgb, ${c} ${p}%, transparent)`;
-const C_CACHE = 'var(--chart-1)', C_INPUT = 'var(--chart-2)', C_OUTPUT = 'var(--chart-3)';
-
-function derive(){
-  const sc = SCEN[state.scenario], t = sc.turns, last = t[t.length-1], prev = t[t.length-2];
-  const usage = last.usage, limit = sc.limit;
-  const pct = limit ? usage/limit*100 : null;
-  const recent = t.slice(-4);
-  const growth = recent.length > 1 ? (recent[recent.length-1].usage - recent[0].usage)/(recent.length-1) : usage;
-  const toWarn = limit && pct < 85 ? Math.max(1, Math.ceil((limit*0.85 - usage)/growth)) : null;
-  let level;
-  if (!limit)        level = { key:'unknown', color:'var(--muted-foreground)', label:'上限未知', hint:'未收錄此模型的上下文上限，僅顯示絕對 Token 數。可在 config.json 補充映射。' };
-  else if (pct >= 85) level = { key:'crit', color:'var(--error)',   label:'危險', hint:'已超過 85%，建議立即壓縮，以免觸發截斷或回答質量下降。' };
-  else if (pct >= 70) level = { key:'warn', color:'var(--warning)', label:'預警', hint:'已超過 70%，完成當前步驟後可考慮壓縮。' };
-  else                level = { key:'ok',   color:'var(--success)', label:'健康', hint:'上下文餘量充足。' };
-  return {
-    sc, t, last, usage, limit, pct, level, growth, toWarn,
-    remaining: limit ? limit - usage : null,
-    delta: prev ? usage - prev.usage : usage,
-    hit: last.cache/(last.cache+last.input)*100,
-    cumulative: t.reduce((s,x) => s + x.usage*x.calls*0.92, 0),
-    calls: t.reduce((s,x) => s + x.calls, 0),
-    scaleMax: limit || Math.max(...t.map(x => x.usage))*1.25,
-  };
-}
-const pctText = d => d.limit ? d.pct.toFixed(1)+'%' : fmtK(d.usage);
-
-function convSelect(cls=''){
-  return `<select data-act="conv" class="${cls} bg-transparent border border-[var(--border)] rounded px-1.5 py-1 text-xs text-[var(--foreground)] min-w-0 truncate focus:outline-none">
-    ${CONVS.map((c,i) => `<option value="${i}" ${i===state.conv?'selected':''}>${i===0?'跟隨 · ':'釘選 · '}${c}</option>`).join('')}
-  </select>`;
-}
-function snapshot(d){
-  return state.running
-    ? `<span class="inline-flex items-center gap-1.5 text-[var(--warning)]"><span class="w-1.5 h-1.5 rounded-full pulse" style="background:var(--warning)"></span>執行中 · 數據截至 ${d.last.time} Stop</span>`
-    : `<span class="inline-flex items-center gap-1.5 text-[var(--muted-foreground)]"><span class="w-1.5 h-1.5 rounded-full" style="background:var(--success)"></span>Stop 快照 · ${d.last.time}</span>`;
-}
-function stackBar(row, max, h='h-2'){
-  const w = v => (v/max*100).toFixed(2)+'%';
-  return `<div class="w-full ${h} rounded-full bg-[var(--secondary)] overflow-hidden flex">
-    <div class="ease" style="width:${w(row.cache)};background:${C_CACHE}"></div>
-    <div class="ease" style="width:${w(row.input)};background:${C_INPUT}"></div>
-    <div class="ease" style="width:${w(row.output)};background:${C_OUTPUT}"></div></div>`;
-}
-function thresholdMarks(d){
-  if (!d.limit) return '';
-  return [70,85].map(p => `<span class="absolute top-[-3px] bottom-[-3px] w-px" style="left:${p}%;background:var(--foreground);opacity:.35"></span>`).join('');
-}
-function compactBlock(d, prominent){
-  if (state.compact === 'sent')
-    return `<div class="text-xs text-[var(--success)]">✓ 已模擬 app.sendMessage('/compact')。新 Stop 到達後面板會更新。</div>`;
-  if (state.compact === 'confirm')
-    return `<div class="rounded-md p-2.5 space-y-2 text-xs" style="background:${mix('var(--warning)',12)};border:1px solid ${mix('var(--warning)',45)}">
-      <div>向當前對話發送 <code class="font-mono px-1 rounded bg-[var(--secondary)]">/compact</code>？壓縮後早期細節將被摘要替代。</div>
-      <div class="flex gap-2">
-        <button data-act="compact-yes" class="px-3 py-1 rounded font-medium" style="background:var(--primary);color:var(--primary-foreground)">確認發送</button>
-        <button data-act="compact-no" class="px-3 py-1 rounded border border-[var(--border)] text-[var(--muted-foreground)]">取消</button>
-      </div></div>`;
-  if (state.running)
-    return `<button disabled class="w-full text-xs px-3 py-2 rounded-md border border-dashed border-[var(--border)] text-[var(--muted-foreground)] cursor-not-allowed">Agent 執行中 · 完成後可壓縮</button>`;
-  const k = d.level.key;
-  const style = k === 'crit' ? `background:var(--error);color:var(--primary-foreground);border-color:transparent`
-              : k === 'warn' ? `background:${mix('var(--warning)',16)};color:var(--foreground);border-color:${mix('var(--warning)',55)}`
-              : `background:transparent;color:var(--muted-foreground)`;
-  return `<button data-act="compact-ask" class="${prominent?'w-full py-2':'py-1.5'} text-xs font-medium px-3 rounded-md border border-[var(--border)] hover:opacity-90" style="${style}">壓縮上下文 /compact</button>`;
-}
-function legendRow(color, label, val, share){
-  return `<div class="flex items-center gap-2 text-xs">
-    <span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${color}"></span>
-    <span class="text-[var(--muted-foreground)] flex-1">${label}</span>
-    <span class="font-mono tnum font-medium">${fmtN(val)}</span>
-    <span class="font-mono tnum text-[var(--muted-foreground)] w-11 text-right">${share.toFixed(1)}%</span></div>`;
-}
-
-/* ---------------- Variant A: Gauge dashboard ---------------- */
-function VariantA(d){
-  const R = 80, L = Math.PI*R, p = d.limit ? Math.min(1, d.pct/100) : 0.0;
-  const tick = q => { const a = Math.PI*(1-q); const x1=100+(R-11)*Math.cos(a), y1=100-(R-11)*Math.sin(a), x2=100+(R+11)*Math.cos(a), y2=100-(R+11)*Math.sin(a);
-    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--foreground)" stroke-opacity=".4" stroke-width="1.5"/>`; };
-  const pts = d.t.map((x,i) => [i/(d.t.length-1||1)*300, 60 - x.usage/d.scaleMax*56]);
-  const line = pts.map(p => p.join(',')).join(' ');
-  const th = q => d.limit ? `<line x1="0" x2="300" y1="${60-q*56}" y2="${60-q*56}" stroke="var(--foreground)" stroke-opacity=".25" stroke-dasharray="3 3"/>` : '';
-  return `
-  <div class="p-4 space-y-4">
-    <div class="flex items-center justify-between gap-2">
-      ${convSelect('flex-1')}
-      <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)] truncate max-w-[45%]">${d.sc.model}</span>
-    </div>
-
-    <div class="rounded-lg border border-[var(--card-border)] p-3">
-      <svg viewBox="0 0 200 112" class="w-full max-w-[260px] mx-auto block">
-        <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--secondary)" stroke-width="14" stroke-linecap="round"/>
-        <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="${d.level.color}" stroke-width="14" stroke-linecap="round"
-              stroke-dasharray="${L}" stroke-dashoffset="${L*(1-p)}" class="ease" ${d.limit?'':'stroke-opacity="0"'}/>
-        ${d.limit ? tick(.7)+tick(.85) : ''}
-        <text x="100" y="82" text-anchor="middle" font-size="26" font-weight="700" fill="var(--foreground)" font-family="ui-monospace,monospace">${pctText(d)}</text>
-        <text x="100" y="100" text-anchor="middle" font-size="10" fill="var(--muted-foreground)">${d.limit ? fmtK(d.usage)+' / '+fmtK(d.limit) : 'tokens · 上限未知'}</text>
-      </svg>
-      <div class="flex items-center justify-between text-xs mt-1">
-        <span class="font-medium" style="color:${d.level.color}">● ${d.level.label}</span>
-        <span class="font-mono tnum text-[var(--muted-foreground)]">${d.limit ? '剩餘 '+fmtK(d.remaining) : '請補充模型上限'}</span>
+    <!-- Prototype Controller -->
+    <section class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 space-y-3">
+      <div class="flex items-center justify-between gap-2 pb-2 border-b border-[var(--card-border)]">
+        <span class="text-xs font-semibold tracking-wide uppercase text-[var(--primary)]">PROTOTYPE v3 · 極致密度評估</span>
+        <span class="text-xs text-[var(--muted-foreground)]">/compact 進度填充按鈕</span>
       </div>
-    </div>
 
-    <section class="space-y-2">
-      <div class="flex items-center justify-between text-xs">
-        <span class="font-semibold">Token 結構</span>
-        <span class="text-[var(--muted-foreground)]">緩存命中 <b class="font-mono text-[var(--foreground)]">${d.hit.toFixed(1)}%</b></span>
-      </div>
-      ${stackBar(d.last, d.usage, 'h-2.5')}
-      <div class="space-y-1.5 pt-1">
-        ${legendRow(C_CACHE,'Cache Read', d.last.cache, d.last.cache/d.usage*100)}
-        ${legendRow(C_INPUT,'Uncached Input', d.last.input, d.last.input/d.usage*100)}
-        ${legendRow(C_OUTPUT,'Output', d.last.output, d.last.output/d.usage*100)}
-      </div>
-    </section>
-
-    <section class="space-y-1.5 pt-3 border-t border-[var(--card-border)]">
-      <div class="flex items-center justify-between text-xs">
-        <span class="font-semibold">每輪趨勢 <span class="font-normal text-[var(--muted-foreground)]">· 可選</span></span>
-        <span class="font-mono tnum text-[var(--muted-foreground)]">末輪 +${fmtK(d.delta)}</span>
-      </div>
-      <svg viewBox="0 0 300 62" preserveAspectRatio="none" class="w-full h-14">
-        ${th(.7)}${th(.85)}
-        <polygon points="0,60 ${line} 300,60" fill="${d.level.color}" fill-opacity=".14"/>
-        <polyline points="${line}" fill="none" stroke="${d.level.color}" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
-      </svg>
-    </section>
-
-    <section class="flex items-center justify-between text-xs pt-3 border-t border-[var(--card-border)]">
-      <span class="text-[var(--muted-foreground)]">會話累計 <span class="opacity-70">· 可選</span></span>
-      <span class="font-mono tnum">${fmtK(d.cumulative)} · ${d.calls} 次調用 · ${d.t.length} 輪</span>
-    </section>
-
-    <section class="space-y-2 pt-3 border-t border-[var(--card-border)]">
-      <div class="text-xs text-[var(--muted-foreground)]">${d.level.hint}</div>
-      ${compactBlock(d, true)}
-      <div class="flex justify-between text-xs pt-1">${snapshot(d)}<button class="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">↻</button></div>
-    </section>
-  </div>`;
-}
-
-/* ---------------- Variant B: Turn ledger ---------------- */
-function VariantB(d){
-  if (state.expanded.size === 0) state.expanded.add(d.last.idx);
-  const rows = [...d.t].reverse().map((x, i, arr) => {
-    const prev = arr[i+1], dl = prev ? x.usage - prev.usage : x.usage, open = state.expanded.has(x.idx);
-    const lvlPct = d.limit ? x.usage/d.limit*100 : null;
-    const c = lvlPct === null ? 'var(--muted-foreground)' : lvlPct >= 85 ? 'var(--error)' : lvlPct >= 70 ? 'var(--warning)' : 'var(--foreground)';
-    return `<div class="border-b border-[var(--card-border)] ${i===0?'':'opacity-[.92]'}">
-      <button data-act="row" data-idx="${x.idx}" class="w-full grid grid-cols-[52px_1fr_auto] items-center gap-3 px-4 py-2 text-xs text-left hover:bg-[var(--secondary)]/40">
-        <span class="text-[var(--muted-foreground)] font-mono tnum leading-tight">#${x.idx}<br><span class="opacity-70">${x.time}</span></span>
-        <span class="relative">${stackBar(x, d.scaleMax, 'h-1.5')}</span>
-        <span class="text-right font-mono tnum leading-tight"><span style="color:${c}">${fmtK(x.usage)}</span><br><span class="text-[var(--muted-foreground)]">+${fmtK(dl)}</span></span>
-      </button>
-      ${open ? `<div class="grid grid-cols-4 gap-2 px-4 pb-3 pl-[76px] text-xs">
-        ${[['Cache',x.cache,C_CACHE],['Uncached',x.input,C_INPUT],['Output',x.output,C_OUTPUT]].map(([l,v,col]) =>
-          `<div><div class="flex items-center gap-1 text-[var(--muted-foreground)]"><span class="w-1.5 h-1.5 rounded-sm" style="background:${col}"></span>${l}</div><div class="font-mono tnum">${fmtK(v)}</div></div>`).join('')}
-        <div><div class="text-[var(--muted-foreground)]">命中率</div><div class="font-mono tnum">${(x.cache/(x.cache+x.input)*100).toFixed(0)}%</div></div>
-      </div>` : ''}
-    </div>`;
-  }).join('');
-  const banner = (d.level.key === 'warn' || d.level.key === 'crit' || state.compact !== 'idle')
-    ? `<div class="mx-4 mt-3 rounded-md p-3 space-y-2" style="background:${mix(d.level.color,10)};border:1px solid ${mix(d.level.color,40)}">
-         <div class="text-xs"><b style="color:${d.level.color}">${d.level.label}</b> · ${d.level.hint}</div>${compactBlock(d, true)}</div>` : '';
-  return `
-  <div class="sticky top-0 z-10 bg-[var(--card)] border-b border-[var(--card-border)] px-4 pt-3 pb-3 space-y-2">
-    <div class="flex items-center justify-between gap-2 text-xs">
-      ${convSelect('flex-1')}
-      <span class="font-mono text-[var(--muted-foreground)] truncate max-w-[40%]">${d.sc.model}</span>
-    </div>
-    <div class="flex items-baseline justify-between">
-      <span class="text-xs text-[var(--muted-foreground)]">Context Usage</span>
-      <span class="font-mono tnum text-sm font-semibold">${fmtK(d.usage)}<span class="text-[var(--muted-foreground)] font-normal"> / ${d.limit?fmtK(d.limit):'?'}</span>
-        <span class="ml-1" style="color:${d.level.color}">${d.limit ? d.pct.toFixed(1)+'%' : ''}</span></span>
-    </div>
-    <div class="relative">
-      <div class="w-full h-2 rounded-full bg-[var(--secondary)] overflow-hidden ${d.limit?'':'hatch'}">
-        <div class="h-full rounded-full ease" style="width:${d.limit?Math.min(100,d.pct):0}%;background:${d.level.color}"></div>
-      </div>${thresholdMarks(d)}
-    </div>
-    <div class="flex justify-between text-xs">${snapshot(d)}<span class="text-[var(--muted-foreground)]">命中 ${d.hit.toFixed(0)}%</span></div>
-  </div>
-  ${banner}
-  <div class="flex items-center justify-between px-4 pt-3 pb-1 text-xs text-[var(--muted-foreground)]">
-    <span>每個 Stop 一行 · 點擊展開結構</span>
-    <span class="flex items-center gap-2">
-      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm" style="background:${C_CACHE}"></span>Cache</span>
-      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm" style="background:${C_INPUT}"></span>Input</span>
-      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm" style="background:${C_OUTPUT}"></span>Output</span>
-    </span>
-  </div>
-  <div>${rows}</div>
-  <div class="px-4 py-3 flex items-center justify-between text-xs border-t border-[var(--card-border)]">
-    <span class="text-[var(--muted-foreground)]">累計 ${d.t.length} 輪 · ${d.calls} 次調用</span>
-    <span class="font-mono tnum">${fmtK(d.cumulative)} tokens</span>
-  </div>
-  ${d.level.key === 'ok' || d.level.key === 'unknown' ? `<div class="px-4 pb-4 flex justify-end">${state.compact==='idle'?compactBlock(d,false):''}</div>` : ''}`;
-}
-
-/* ---------------- Variant C: Capacity tank ---------------- */
-function VariantC(d){
-  const H = 380, max = d.scaleMax, h = v => (v/max*H);
-  const ticks = d.t.slice(0,-1).map(x => `<span class="absolute right-[-7px] w-[5px] h-px" style="bottom:${h(x.usage)}px;background:var(--muted-foreground);opacity:.6"></span>`).join('');
-  const thr = q => `<div class="absolute left-[-4px] right-[-4px] border-t border-dashed" style="bottom:${q*H}px;border-color:${q>.8?'var(--error)':'var(--warning)'}"></div>
-                    <span class="absolute left-[calc(100%+10px)] text-[10px] font-mono" style="bottom:${q*H-6}px;color:${q>.8?'var(--error)':'var(--warning)'}">${q*100}%</span>`;
-  return `
-  <div class="p-4 space-y-3">
-    <div class="flex items-center gap-2 text-xs">
-      ${convSelect('flex-1')}
-    </div>
-    <div class="flex items-center justify-between text-xs">
-      <span class="font-mono text-[var(--muted-foreground)] truncate">${d.sc.model}</span>
-      ${snapshot(d)}
-    </div>
-
-    <div class="flex gap-6 pt-2">
-      <!-- tank -->
-      <div class="relative shrink-0 w-[68px]" style="height:${H}px">
-        <div class="absolute inset-0 rounded-lg border-2 border-[var(--border)] overflow-hidden ${d.limit?'':'hatch'} ${d.limit?'':'border-dashed'}">
-          <div class="absolute bottom-0 left-0 right-0 flex flex-col-reverse">
-            <div class="ease" style="height:${h(d.last.cache)}px;background:${C_CACHE}"></div>
-            <div class="ease" style="height:${h(d.last.input)}px;background:${C_INPUT}"></div>
-            <div class="ease" style="height:${h(d.last.output)}px;background:${C_OUTPUT}"></div>
-          </div>
-          <div class="absolute top-2 left-0 right-0 text-center text-[10px] text-[var(--muted-foreground)] leading-tight">
-            ${d.limit ? '剩餘<br><b class="font-mono text-[var(--foreground)]">'+fmtK(d.remaining)+'</b>' : '上限<br>未知'}
-          </div>
+      <!-- Scenario States -->
+      <div class="space-y-1.5">
+        <div class="text-xs text-[var(--muted-foreground)]">1. 模擬上下文水位</div>
+        <div class="grid grid-cols-5 gap-1.5">
+          <button data-state="normal" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">正常 21%</button>
+          <button data-state="warning" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">預警 78%</button>
+          <button data-state="critical" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">危險 93%</button>
+          <button data-state="unknown" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">未知模型</button>
+          <button data-state="empty" class="state-btn px-1.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--border)] transition">空狀態</button>
         </div>
-        ${d.limit ? thr(.7)+thr(.85) : ''}
-        ${ticks}
       </div>
 
-      <!-- readout -->
-      <div class="flex-1 min-w-0 flex flex-col justify-end space-y-4 pb-1">
-        <div>
-          <div class="text-xs text-[var(--muted-foreground)]">Context Usage</div>
-          <div class="text-4xl font-bold font-mono tnum tracking-tight leading-none mt-1" style="color:${d.level.key==='ok'?'var(--foreground)':d.level.color}">${pctText(d)}</div>
-          <div class="text-xs font-mono tnum text-[var(--muted-foreground)] mt-1">${fmtN(d.usage)} / ${d.limit?fmtN(d.limit):'—'}</div>
+      <!-- Width & Optional Detail Toggle -->
+      <div class="grid grid-cols-2 gap-3 pt-1">
+        <div class="space-y-1.5">
+          <div class="text-xs text-[var(--muted-foreground)]">2. 模擬側邊欄寬度</div>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button data-width="320" class="width-btn px-2 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition">窄版 320px</button>
+            <button data-width="440" class="width-btn px-2 py-1 rounded-lg text-xs font-medium border border-[var(--border)] transition">標準 440px</button>
+          </div>
         </div>
         <div class="space-y-1.5">
-          ${legendRow(C_OUTPUT,'Output', d.last.output, d.last.output/d.usage*100)}
-          ${legendRow(C_INPUT,'Uncached', d.last.input, d.last.input/d.usage*100)}
-          ${legendRow(C_CACHE,'Cache Read', d.last.cache, d.last.cache/d.usage*100)}
-          <div class="flex justify-between text-xs pt-1 border-t border-[var(--card-border)]"><span class="text-[var(--muted-foreground)]">緩存命中率</span><span class="font-mono tnum">${d.hit.toFixed(1)}%</span></div>
+          <div class="text-xs text-[var(--muted-foreground)]">3. 細節開關</div>
+          <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none pt-1">
+            <input id="toggleCumulative" type="checkbox" checked class="accent-[var(--primary)]" />
+            <span>顯示會話累計消耗</span>
+          </label>
         </div>
-        <div class="text-xs rounded-md p-2 bg-[var(--secondary)]/50 leading-relaxed">
-          <span class="text-[var(--muted-foreground)]">近 3 輪平均增速</span> <b class="font-mono">+${fmtK(d.growth)}</b>/輪<br>
-          ${d.toWarn ? `約 <b class="font-mono">${d.toWarn}</b> 輪後到達 85%` : d.limit ? `<span style="color:var(--error)">已越過 85% 線</span>` : '<span class="text-[var(--muted-foreground)]">上限未知，無法預測</span>'}
-          <span class="text-[var(--muted-foreground)]"> · 新指標候選</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="text-[10px] text-[var(--muted-foreground)]">艙壁右側刻度 = 歷史各輪水位 · 可選趨勢模塊</div>
-
-    <div class="space-y-2 pt-3 border-t border-[var(--card-border)]">
-      <div class="flex justify-between text-xs"><span class="text-[var(--muted-foreground)]">會話累計 · 可選</span><span class="font-mono tnum">${fmtK(d.cumulative)} · ${d.t.length} 輪</span></div>
-      ${compactBlock(d, true)}
-    </div>
-  </div>`;
-}
-
-/* ---------------- Variant D: Glance minimal ---------------- */
-function VariantD(d){
-  const sec = (key, title, body) => `
-    <div class="border-t border-[var(--card-border)]">
-      <button data-act="d" data-key="${key}" class="w-full flex items-center justify-between py-2.5 text-xs">
-        <span class="font-medium">${title}</span><span class="text-[var(--muted-foreground)]">${state.dOpen[key]?'−':'+'}</span>
-      </button>
-      ${state.dOpen[key] ? `<div class="pb-3">${body}</div>` : ''}
-    </div>`;
-  const bars = d.t.map(x => `<div class="flex-1 rounded-t ease" style="height:${Math.max(4,x.usage/d.scaleMax*100)}%;background:${x===d.last?d.level.color:'var(--muted-foreground)'};opacity:${x===d.last?1:.35}"></div>`).join('');
-  const sentence = !d.limit ? `已用 ${fmtK(d.usage)} tokens，模型上限未知。`
-    : d.level.key === 'ok' ? `餘 ${fmtK(d.remaining)}，按當前節奏約 ${d.toWarn} 輪後需要壓縮。`
-    : d.level.key === 'warn' ? `餘 ${fmtK(d.remaining)}，約 ${d.toWarn} 輪後進入危險區。`
-    : `僅餘 ${fmtK(d.remaining)}，建議現在壓縮。`;
-  return `
-  <div class="px-5 pt-6 pb-4">
-    <div class="flex items-center justify-between text-xs text-[var(--muted-foreground)]">
-      <span class="truncate">${CONVS[state.conv]}</span>${snapshot(d)}
-    </div>
-    <div class="mt-6 text-center">
-      <div class="text-7xl font-bold font-mono tnum tracking-tighter leading-none" style="color:${d.level.key==='ok'?'var(--foreground)':d.level.color}">
-        ${d.limit ? Math.round(d.pct)+'<span class="text-3xl align-top">%</span>' : fmtK(d.usage)}
-      </div>
-      <div class="mt-3 text-sm">${sentence}</div>
-      <div class="mt-1 text-xs font-mono text-[var(--muted-foreground)]">${d.sc.model}</div>
-    </div>
-    <div class="relative mt-5 mb-6">
-      <div class="w-full h-1 rounded-full bg-[var(--secondary)] overflow-hidden ${d.limit?'':'hatch'}">
-        <div class="h-full ease" style="width:${d.limit?Math.min(100,d.pct):0}%;background:${d.level.color}"></div>
-      </div>${thresholdMarks(d)}
-    </div>
-    ${(d.level.key==='warn'||d.level.key==='crit'||state.compact!=='idle') ? `<div class="mb-5">${compactBlock(d,true)}</div>` : ''}
-    ${sec('breakdown','Token 結構', `
-      ${stackBar(d.last, d.usage, 'h-2')}
-      <div class="space-y-1.5 mt-2">
-        ${legendRow(C_CACHE,'Cache Read', d.last.cache, d.last.cache/d.usage*100)}
-        ${legendRow(C_INPUT,'Uncached Input', d.last.input, d.last.input/d.usage*100)}
-        ${legendRow(C_OUTPUT,'Output', d.last.output, d.last.output/d.usage*100)}
-        <div class="flex justify-between text-xs"><span class="text-[var(--muted-foreground)]">緩存命中率</span><span class="font-mono">${d.hit.toFixed(1)}%</span></div>
-      </div>`)}
-    ${sec('trend','每輪趨勢 · 可選', `<div class="flex items-end gap-1 h-16">${bars}</div>
-      <div class="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1"><span>#1</span><span>末輪 +${fmtK(d.delta)}</span><span>#${d.t.length}</span></div>`)}
-    ${sec('total','會話累計與切換 · 可選', `
-      <div class="flex justify-between text-xs mb-2"><span class="text-[var(--muted-foreground)]">累計消耗</span><span class="font-mono">${fmtK(d.cumulative)} · ${d.calls} 次調用</span></div>
-      ${convSelect('w-full')}`)}
-    ${(d.level.key==='ok'||d.level.key==='unknown') && state.compact==='idle' ? `<div class="border-t border-[var(--card-border)] pt-3 text-right">${compactBlock(d,false)}</div>` : ''}
-  </div>`;
-}
-
-/* ---------------- Variant E: Combo (A gauge + A tokens + D trend + D total/switch) ---------------- */
-function VariantE(d){
-  const R = 80, L = Math.PI*R, p = d.limit ? Math.min(1, d.pct/100) : 0;
-  const tick = q => { const a = Math.PI*(1-q); const x1=100+(R-11)*Math.cos(a), y1=100-(R-11)*Math.sin(a), x2=100+(R+11)*Math.cos(a), y2=100-(R+11)*Math.sin(a);
-    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--foreground)" stroke-opacity=".4" stroke-width="1.5"/>`; };
-  const sec = (key, title, extra, body) => `
-    <div class="border-t border-[var(--card-border)]">
-      <button data-act="d" data-key="${key}" class="w-full flex items-center justify-between py-2.5 text-xs">
-        <span class="font-semibold">${title}</span>
-        <span class="flex items-center gap-2 text-[var(--muted-foreground)]">${state.dOpen[key] ? '' : extra}<span>${state.dOpen[key]?'−':'+'}</span></span>
-      </button>
-      ${state.dOpen[key] ? `<div class="pb-3">${body}</div>` : ''}
-    </div>`;
-  const bars = d.t.map(x => `<div class="flex-1 rounded-t ease" title="#${x.idx} ${x.time} · ${fmtN(x.usage)}" style="height:${Math.max(4,x.usage/d.scaleMax*100)}%;background:${x===d.last?d.level.color:'var(--muted-foreground)'};opacity:${x===d.last?1:.35}"></div>`).join('');
-  return `
-  <div class="p-4 space-y-4">
-    <div class="flex items-center justify-between gap-2 text-xs">
-      <span class="truncate font-medium">${CONVS[state.conv]}</span>
-      <span class="font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)] truncate max-w-[45%]">${d.sc.model}</span>
-    </div>
-
-    <!-- A: gauge -->
-    <div class="rounded-lg border border-[var(--card-border)] p-3">
-      <svg viewBox="0 0 200 112" class="w-full max-w-[260px] mx-auto block">
-        <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--secondary)" stroke-width="14" stroke-linecap="round"/>
-        <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="${d.level.color}" stroke-width="14" stroke-linecap="round"
-              stroke-dasharray="${L}" stroke-dashoffset="${L*(1-p)}" class="ease" ${d.limit?'':'stroke-opacity="0"'}/>
-        ${d.limit ? tick(.7)+tick(.85) : ''}
-        <text x="100" y="82" text-anchor="middle" font-size="26" font-weight="700" fill="var(--foreground)" font-family="ui-monospace,monospace">${pctText(d)}</text>
-        <text x="100" y="100" text-anchor="middle" font-size="10" fill="var(--muted-foreground)">${d.limit ? fmtK(d.usage)+' / '+fmtK(d.limit) : 'tokens · 上限未知'}</text>
-      </svg>
-      <div class="flex items-center justify-between text-xs mt-1">
-        <span class="font-medium" style="color:${d.level.color}">● ${d.level.label}</span>
-        <span class="font-mono tnum text-[var(--muted-foreground)]">${d.limit ? '剩餘 '+fmtK(d.remaining) : '請補充模型上限'}</span>
-      </div>
-    </div>
-
-    <!-- A: token structure -->
-    <section class="space-y-2">
-      <div class="flex items-center justify-between text-xs">
-        <span class="font-semibold">Token 結構</span>
-        <span class="text-[var(--muted-foreground)]">緩存命中 <b class="font-mono text-[var(--foreground)]">${d.hit.toFixed(1)}%</b></span>
-      </div>
-      ${stackBar(d.last, d.usage, 'h-2.5')}
-      <div class="space-y-1.5 pt-1">
-        ${legendRow(C_CACHE,'Cache Read', d.last.cache, d.last.cache/d.usage*100)}
-        ${legendRow(C_INPUT,'Uncached Input', d.last.input, d.last.input/d.usage*100)}
-        ${legendRow(C_OUTPUT,'Output', d.last.output, d.last.output/d.usage*100)}
       </div>
     </section>
 
-    <!-- D: collapsible trend + total/switch -->
-    <div>
-      ${sec('eTrend','每輪趨勢', `<span class="font-mono">末輪 +${fmtK(d.delta)}</span>`, `
-        <div class="flex items-end gap-1 h-16">${bars}</div>
-        <div class="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1"><span>#1</span><span>末輪 +${fmtK(d.delta)}</span><span>#${d.t.length}</span></div>`)}
-      ${sec('eTotal','會話累計與切換', `<span class="font-mono">${fmtK(d.cumulative)}</span>`, `
-        <div class="flex justify-between text-xs mb-2"><span class="text-[var(--muted-foreground)]">累計消耗</span><span class="font-mono tnum">${fmtK(d.cumulative)} · ${d.calls} 次調用 · ${d.t.length} 輪</span></div>
-        ${convSelect('w-full')}`)}
+    <!-- Simulated Auxiliary Side Pane -->
+    <div id="paneWrapper" class="mx-auto transition-all duration-200" style="max-width: 440px;">
+      <main class="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
+
+        <!-- Header: Progress-filled /compact container right next to Manual Refresh -->
+        <header class="px-3.5 py-2.5 border-b border-[var(--card-border)] flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span id="headerDot" class="w-2.5 h-2.5 rounded-full shrink-0"></span>
+            <span class="font-semibold text-sm shrink-0">Mon-My-Agy</span>
+            <span id="modelBadge" class="text-xs px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--secondary-foreground)] font-mono truncate"></span>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button id="compactBtn" title="發送 /compact 壓縮上下文"
+              class="relative overflow-hidden px-2.5 py-1 rounded-md border border-[var(--border)] text-xs font-mono font-medium text-[var(--foreground)] transition cursor-pointer">
+              <span id="compactFill" class="absolute inset-y-0 left-0 bar-transition pointer-events-none" style="width: 0%;"></span>
+              <span class="relative z-10">/compact</span>
+            </button>
+            <button id="refreshBtn" title="手動刷新"
+              class="px-2 py-1 rounded-md border border-[var(--border)] text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer">
+              ↻
+            </button>
+          </div>
+        </header>
+
+        <!-- Two-step inline confirmation for /compact -->
+        <div id="confirmBar" class="hidden px-3.5 py-2 border-b border-[var(--card-border)] bg-[var(--secondary)]/60 flex items-center justify-between gap-2 text-xs">
+          <span>確認發送 <code class="font-mono text-[var(--code-foreground)]">/compact</code> 壓縮上下文？</span>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button id="cancelCompact" class="px-2 py-1 rounded-md border border-[var(--border)] text-xs cursor-pointer">取消</button>
+            <button id="confirmCompact" class="px-2.5 py-1 rounded-md text-xs font-medium bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer">確認</button>
+          </div>
+        </div>
+
+        <!-- Conversation Switcher -->
+        <div id="convBar" class="px-3.5 py-2 border-b border-[var(--card-border)] bg-[var(--background)]/40">
+          <select id="convSelect" aria-label="切換對話" class="w-full bg-transparent text-xs text-[var(--foreground)] focus:outline-none truncate cursor-pointer">
+            <option value="conv-1">Antigravity Context Usage Plugin Development</option>
+            <option value="conv-2">Matt Pocock Skills Setup</option>
+            <option value="conv-3">GitHub Skills Search And Analysis</option>
+          </select>
+        </div>
+
+        <!-- Dense Telemetry Body -->
+        <div class="p-3.5 space-y-3.5">
+          <!-- Module 1: Primary Context Usage -->
+          <section id="modPrimary"></section>
+
+          <!-- Module 2: Token Breakdown -->
+          <section id="modBreakdown" class="pt-3 border-t border-[var(--card-border)] space-y-2"></section>
+
+          <!-- Module 3: Cumulative Usage -->
+          <section id="modCumulative" class="pt-3 border-t border-[var(--card-border)] space-y-1.5"></section>
+        </div>
+
+      </main>
     </div>
 
-    <!-- confirmed: safe quick action -->
-    <section class="space-y-2 pt-3 border-t border-[var(--card-border)]">
-      <div class="text-xs text-[var(--muted-foreground)]">${d.level.hint}</div>
-      ${compactBlock(d, true)}
-      <div class="flex justify-between text-xs pt-1">${snapshot(d)}<button class="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">↻</button></div>
-    </section>
-  </div>`;
-}
+    <!-- Toast Feedback -->
+    <div id="toast" class="hidden text-xs px-3 py-2 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] text-center"></div>
 
-/* ---------------- render & wiring ---------------- */
-const RENDER = { A:VariantA, B:VariantB, C:VariantC, D:VariantD, E:VariantE };
-function render(){
-  const d = derive();
-  document.getElementById('root').innerHTML = RENDER[state.variant](d);
-  document.getElementById('tab-dot').style.background = d.level.color;
-  const v = VARIANTS.find(x => x.key === state.variant);
-  document.getElementById('vlabel').textContent = `${v.key} · ${v.name}`;
-  document.getElementById('scen').innerHTML = Object.entries(SCEN).map(([k,s]) =>
-    `<button data-s="${k}" class="px-2 py-0.5 rounded-full ${k===state.scenario?'font-semibold':''}" style="${k===state.scenario?'background:var(--background);color:var(--foreground)':'opacity:.75'}">${s.label}</button>`).join('');
-}
-function go(step){
-  const i = VARIANTS.findIndex(x => x.key === state.variant);
-  state.variant = VARIANTS[(i + step + VARIANTS.length) % VARIANTS.length].key;
-  state.compact = 'idle';
-  try { history.replaceState(null, '', '?variant=' + state.variant); } catch (e) {}
-  render();
-}
-document.getElementById('prev').onclick = () => go(-1);
-document.getElementById('next').onclick = () => go(1);
-document.addEventListener('keydown', e => {
-  const t = e.target; if (t.closest && t.closest('input,textarea,select,[contenteditable]')) return;
-  if (e.key === 'ArrowLeft') go(-1); if (e.key === 'ArrowRight') go(1);
-});
-document.getElementById('scen').addEventListener('click', e => {
-  const b = e.target.closest('[data-s]'); if (!b) return;
-  state.scenario = b.dataset.s; state.compact = 'idle'; state.expanded.clear(); render();
-});
-document.getElementById('running').onchange = e => { state.running = e.target.checked; state.compact = 'idle'; render(); };
-document.querySelectorAll('.wbtn').forEach(b => b.onclick = () => {
-  document.getElementById('pane').style.width = b.dataset.w + 'px';
-  document.getElementById('caption').style.maxWidth = b.dataset.w + 'px';
-  document.querySelectorAll('.wbtn').forEach(x => x.style.background = x === b ? 'var(--secondary)' : 'transparent');
-});
-const root = document.getElementById('root');
-root.addEventListener('click', e => {
-  const b = e.target.closest('[data-act]'); if (!b) return;
-  const a = b.dataset.act;
-  if (a === 'compact-ask') state.compact = 'confirm';
-  else if (a === 'compact-no') state.compact = 'idle';
-  else if (a === 'compact-yes') state.compact = 'sent';
-  else if (a === 'row') { const i = +b.dataset.idx; state.expanded.has(i) ? state.expanded.delete(i) : state.expanded.add(i); }
-  else if (a === 'd') state.dOpen[b.dataset.key] = !state.dOpen[b.dataset.key];
-  else return;
-  render();
-});
-root.addEventListener('change', e => { if (e.target.dataset.act === 'conv') { state.conv = +e.target.value; render(); } });
+  </div>
 
-document.querySelector('.wbtn[data-w="440"]').click();
-render();
-</script>
+  <script>
+    const SCENARIOS = {
+      normal: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 10649,
+        cacheRead: 31339,
+        output: 627,
+        cumulative: { uncachedInput: 52410, cacheRead: 98120, output: 4820 }
+      },
+      warning: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 24800,
+        cacheRead: 128400,
+        output: 2800,
+        cumulative: { uncachedInput: 164200, cacheRead: 512000, output: 19400 }
+      },
+      critical: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 18500,
+        cacheRead: 164200,
+        output: 3300,
+        cumulative: { uncachedInput: 215000, cacheRead: 842000, output: 28600 }
+      },
+      unknown: {
+        model: 'gemini-next-exp-05',
+        limit: null,
+        uncachedInput: 14200,
+        cacheRead: 48600,
+        output: 1120,
+        cumulative: { uncachedInput: 68400, cacheRead: 145000, output: 7210 }
+      },
+      empty: null
+    };
+
+    const ui = {
+      scenario: 'normal',
+      width: 440,
+      showCumulative: true,
+      confirmingCompact: false
+    };
+
+    const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+    const fmtFull = (n) => n.toLocaleString('en-US');
+
+    function getStatusColor(pct) {
+      if (pct === null) return 'var(--primary)';
+      if (pct >= 85) return 'var(--error)';
+      if (pct >= 70) return 'var(--warning)';
+      return 'var(--success)';
+    }
+
+    function getStatusLabel(pct) {
+      if (pct === null) return '上限未知';
+      if (pct >= 85) return '危險水位';
+      if (pct >= 70) return '預警水位';
+      return '健康水位';
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.add('hidden'), 2200);
+    }
+
+    function render() {
+      // Update controller buttons
+      document.querySelectorAll('.state-btn').forEach(btn => {
+        const active = btn.dataset.state === ui.scenario;
+        btn.style.background = active ? 'var(--primary)' : 'transparent';
+        btn.style.color = active ? 'var(--primary-foreground)' : 'var(--foreground)';
+        btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+      });
+      document.querySelectorAll('.width-btn').forEach(btn => {
+        const active = Number(btn.dataset.width) === ui.width;
+        btn.style.background = active ? 'var(--primary)' : 'transparent';
+        btn.style.color = active ? 'var(--primary-foreground)' : 'var(--foreground)';
+        btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+      });
+
+      document.getElementById('paneWrapper').style.maxWidth = ui.width + 'px';
+      document.getElementById('confirmBar').classList.toggle('hidden', !ui.confirmingCompact);
+
+      const d = SCENARIOS[ui.scenario];
+      const dotEl = document.getElementById('headerDot');
+      const modelEl = document.getElementById('modelBadge');
+      const compactBtn = document.getElementById('compactBtn');
+      const compactFill = document.getElementById('compactFill');
+      const convBar = document.getElementById('convBar');
+      const primaryEl = document.getElementById('modPrimary');
+      const breakdownEl = document.getElementById('modBreakdown');
+      const cumulativeEl = document.getElementById('modCumulative');
+
+      if (!d) {
+        dotEl.style.background = 'var(--muted-foreground)';
+        modelEl.textContent = 'waiting';
+        compactFill.style.width = '0%';
+        compactBtn.style.borderColor = 'var(--border)';
+        convBar.classList.add('hidden');
+        primaryEl.innerHTML = `<div class="text-xs text-[var(--muted-foreground)] py-2">尚無已記錄的對話數據。完成一次對話回覆後將自動顯示 Context Usage。</div>`;
+        breakdownEl.classList.add('hidden');
+        cumulativeEl.classList.add('hidden');
+        return;
+      }
+
+      convBar.classList.remove('hidden');
+      breakdownEl.classList.remove('hidden');
+
+      const usage = d.uncachedInput + d.cacheRead + d.output;
+      const pct = d.limit ? (usage / d.limit) * 100 : null;
+      const remaining = d.limit ? Math.max(0, d.limit - usage) : null;
+      const color = getStatusColor(pct);
+      const barW = pct !== null ? Math.min(100, pct) : 100;
+
+      dotEl.style.background = color;
+      modelEl.textContent = d.model;
+
+      // Liquid-fill /compact button tracks Context Usage percentage & status color
+      if (pct !== null) {
+        compactFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+        compactFill.style.background = `color-mix(in srgb, ${color} 32%, transparent)`;
+        compactBtn.style.borderColor = `color-mix(in srgb, ${color} 60%, var(--border))`;
+      } else {
+        compactFill.style.width = '0%';
+        compactBtn.style.borderColor = 'var(--border)';
+      }
+
+      // Primary Dense Telemetry
+      primaryEl.innerHTML = `
+        <div class="font-mono space-y-2">
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <span class="text-[var(--muted-foreground)]">CTX_WINDOW</span>
+            <span class="tabular-nums font-semibold" style="color:${color}">
+              ${fmtFull(usage)}${d.limit ? ' / ' + fmtFull(d.limit) + ' (' + pct.toFixed(1) + '%)' : ' TOKENS (LIMIT_UNKNOWN)'}
+            </span>
+          </div>
+          <div class="w-full h-2 rounded bg-[var(--secondary)] overflow-hidden">
+            <div class="h-full bar-transition" style="width:${barW}%; background:${color}; ${pct === null ? 'opacity:0.45' : ''}"></div>
+          </div>
+          <div class="flex items-center justify-between text-xs text-[var(--muted-foreground)] tabular-nums">
+            <span>STATUS: <strong style="color:${color}">${getStatusLabel(pct)}</strong></span>
+            <span>${remaining !== null ? 'FREE: ' + fmtFull(remaining) : 'CFG: config.json'}</span>
+          </div>
+        </div>
+      `;
+
+      // Token Breakdown
+      const totalIn = d.uncachedInput + d.cacheRead;
+      const cacheHit = totalIn > 0 ? ((d.cacheRead / totalIn) * 100).toFixed(1) : '0.0';
+      const wCache = (d.cacheRead / usage) * 100;
+      const wUncached = (d.uncachedInput / usage) * 100;
+      const wOutput = (d.output / usage) * 100;
+
+      breakdownEl.innerHTML = `
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-medium">Token 結構分解</span>
+          <span class="text-[var(--muted-foreground)] tabular-nums">緩存命中率 <strong class="text-[var(--foreground)]">${cacheHit}%</strong></span>
+        </div>
+        <div class="w-full h-2 rounded bg-[var(--secondary)] overflow-hidden flex">
+          <div style="width:${wCache}%; background: var(--chart-1);" class="bar-transition" title="Cache Read"></div>
+          <div style="width:${wUncached}%; background: var(--chart-2);" class="bar-transition" title="Uncached Input"></div>
+          <div style="width:${wOutput}%; background: var(--chart-3);" class="bar-transition" title="Output"></div>
+        </div>
+        <div class="space-y-1 font-mono text-xs tabular-nums">
+          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-1)"></i>Cache Read</span><span>${fmtFull(d.cacheRead)}</span></div>
+          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-2)"></i>Uncached Input</span><span>${fmtFull(d.uncachedInput)}</span></div>
+          <div class="flex justify-between"><span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i class="w-2 h-2 rounded-full inline-block" style="background:var(--chart-3)"></i>Output</span><span>${fmtFull(d.output)}</span></div>
+        </div>
+      `;
+
+      // Cumulative Usage
+      cumulativeEl.classList.toggle('hidden', !ui.showCumulative);
+      if (ui.showCumulative) {
+        const total = d.cumulative.uncachedInput + d.cumulative.cacheRead + d.cumulative.output;
+        cumulativeEl.innerHTML = `
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-medium">會話累計消耗</span>
+            <span class="font-semibold font-mono tabular-nums">${fmt(total)} tokens</span>
+          </div>
+          <div class="flex items-center justify-between text-xs text-[var(--muted-foreground)] font-mono tabular-nums">
+            <span>輸入 ${fmt(d.cumulative.uncachedInput)}</span>
+            <span>緩存 ${fmt(d.cumulative.cacheRead)}</span>
+            <span>輸出 ${fmt(d.cumulative.output)}</span>
+          </div>
+        `;
+      }
+    }
+
+    document.querySelectorAll('.state-btn').forEach(btn => {
+      btn.onclick = () => { ui.scenario = btn.dataset.state; ui.confirmingCompact = false; render(); };
+    });
+    document.querySelectorAll('.width-btn').forEach(btn => {
+      btn.onclick = () => { ui.width = Number(btn.dataset.width); render(); };
+    });
+    document.getElementById('toggleCumulative').onchange = (e) => { ui.showCumulative = e.target.checked; render(); };
+    document.getElementById('compactBtn').onclick = () => { ui.confirmingCompact = !ui.confirmingCompact; render(); };
+    document.getElementById('cancelCompact').onclick = () => { ui.confirmingCompact = false; render(); };
+    document.getElementById('confirmCompact').onclick = () => {
+      ui.confirmingCompact = false;
+      showToast('模擬調用 app.sendMessage("/compact") 成功');
+      render();
+    };
+    document.getElementById('refreshBtn').onclick = () => showToast('已刷新最新上下文快照');
+
+    render();
+  </script>
 </body>
 </html>
