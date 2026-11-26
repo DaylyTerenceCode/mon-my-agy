@@ -33,11 +33,11 @@ function getStatusLevel(pct: number | null): 'unknown' | 'critical' | 'warning' 
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] 生命週期 Hook 接收標準 JSON Payload 後，以原子/併發安全方式更新 `${PLUGIN_DATA}` 會話索引，單次執行在 50ms 以內；遇到殘缺 Payload 或不可寫路徑時 fail-open 返回零退出碼且不影響宿主。
-- [ ] MCP Server 暴露掛載 `aux_pane` 入口點與 `ui://` 資源的入口 Tool（所有入參可選，支持 `{}` 調用），同時返回文本摘要（`content`）與結構化遙測快照（`structuredContent`）；`ui://` 資源聲明 MIME 類型 `text/html;profile=mcp-app` 且為零外部腳本依賴的單文件 HTML。
-- [ ] 容錯解析會話轉錄日誌計算最近一次有效調用的 **Context Usage**（`uncachedInput + cacheRead + output`）並匹配內置常見模型 **Context Window Limit** 表；當轉錄日誌缺失、為空或包含損壞 JSON 行時安全跳過或降級而不崩潰。
-- [ ] 面板在無已索引會話時展示空狀態（靜音灰圓點、`waiting` 徽章、隱藏無效區塊與引導文案）；在有數據時準確渲染正常水位（`< 70%`）、預警水位（`70%–84.9%`）、危險水位（`>= 85%`）與 `FREE` 剩餘量。
-- [ ] 所有數值展示啟用 `font-variant-numeric: tabular-nums`，在 320px（窄版）與 440px（標準）寬度下均無橫向溢出。
-- [ ] 兩大邊界測試接縫均已落地並通過：使用真實臨時 `${PLUGIN_DATA}` 與夾具驗證 Hook → MCP Server 端到端契約，並通過模擬 `postMessage` Host Bridge 驗證單文件 HTML 的空狀態與三檔水位渲染。
+- [x] 生命週期 Hook 接收標準 JSON Payload 後，以原子/併發安全方式更新 `${PLUGIN_DATA}` 會話索引，單次執行在 50ms 以內；遇到殘缺 Payload 或不可寫路徑時 fail-open 返回零退出碼且不影響宿主。
+- [x] MCP Server 暴露掛載 `aux_pane` 入口點與 `ui://` 資源的入口 Tool（所有入參可選，支持 `{}` 調用），同時返回文本摘要（`content`）與結構化遙測快照（`structuredContent`）；`ui://` 資源聲明 MIME 類型 `text/html;profile=mcp-app` 且為零外部腳本依賴的單文件 HTML。
+- [x] 容錯解析會話轉錄日誌計算最近一次有效調用的 **Context Usage**（`uncachedInput + cacheRead + output`）並匹配內置常見模型 **Context Window Limit** 表；當轉錄日誌缺失、為空或包含損壞 JSON 行時安全跳過或降級而不崩潰。
+- [x] 面板在無已索引會話時展示空狀態（靜音灰圓點、`waiting` 徽章、隱藏無效區塊與引導文案）；在有數據時準確渲染正常水位（`< 70%`）、預警水位（`70%–84.9%`）、危險水位（`>= 85%`）與 `FREE` 剩餘量。
+- [x] 所有數值展示啟用 `font-variant-numeric: tabular-nums`，在 320px（窄版）與 440px（標準）寬度下均無橫向溢出。
+- [x] 兩大邊界測試接縫均已落地並通過：使用真實臨時 `${PLUGIN_DATA}` 與夾具驗證 Hook → MCP Server 端到端契約，並通過模擬 `postMessage` Host Bridge 驗證單文件 HTML 的空狀態與三檔水位渲染。

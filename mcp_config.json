@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mon-my-agy": {
+      "command": "node",
+      "args": [
+        "${PLUGIN_ROOT}/dist/server.mjs",
+        "--data_dir=${PLUGIN_DATA}"
+      ]
+    }
+  }
+}

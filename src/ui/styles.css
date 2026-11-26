@@ -1,0 +1,209 @@
+:root {
+  --mma-bg: var(--color-background-primary, #f4f5f7);
+  --mma-card: var(--color-background-secondary, #ffffff);
+  --mma-surface: var(--color-background-tertiary, #eef0f4);
+  --mma-fg: var(--color-text-primary, #111827);
+  --mma-muted: var(--color-text-secondary, #4b5563);
+  --mma-border: var(--color-border-primary, #d1d5db);
+  --mma-divider: var(--color-border-secondary, #e5e7eb);
+  --mma-accent: var(--color-ring-primary, #1d4ed8);
+  --mma-success: var(--color-text-success, #15803d);
+  --mma-warning: var(--color-text-warning, #b45309);
+  --mma-critical: var(--color-text-danger, #b91c1c);
+  --mma-font-sans: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  --mma-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+:root[data-theme="dark"] {
+  --mma-bg: var(--color-background-primary, #14171d);
+  --mma-card: var(--color-background-secondary, #1c2028);
+  --mma-surface: var(--color-background-tertiary, #262c36);
+  --mma-fg: var(--color-text-primary, #f3f4f6);
+  --mma-muted: var(--color-text-secondary, #a1a8b5);
+  --mma-border: var(--color-border-primary, #323946);
+  --mma-divider: var(--color-border-secondary, #282e39);
+  --mma-accent: var(--color-ring-primary, #60a5fa);
+  --mma-success: var(--color-text-success, #4ade80);
+  --mma-warning: var(--color-text-warning, #fbbf24);
+  --mma-critical: var(--color-text-danger, #f87171);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  background: var(--mma-bg);
+  color: var(--mma-fg);
+  font-family: var(--mma-font-sans);
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  padding: 8px;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.pane-card {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  background: var(--mma-card);
+  border: 1px solid var(--mma-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pane-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--mma-divider);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.header-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  background: var(--mma-muted);
+  transition: background-color 0.25s ease;
+}
+
+.status-dot[data-status="normal"] {
+  background: var(--mma-success);
+}
+
+.status-dot[data-status="warning"] {
+  background: var(--mma-warning);
+}
+
+.status-dot[data-status="critical"] {
+  background: var(--mma-critical);
+}
+
+.status-dot[data-status="unknown"] {
+  background: var(--mma-accent);
+}
+
+.brand-title {
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+  color: var(--mma-fg);
+}
+
+.model-badge {
+  font-family: var(--mma-font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--mma-surface);
+  color: var(--mma-fg);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-body {
+  padding: 14px;
+}
+
+.empty-state {
+  font-size: 12px;
+  color: var(--mma-muted);
+  padding: 6px 0;
+}
+
+.primary-metrics {
+  font-family: var(--mma-font-mono);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.metrics-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.metrics-label {
+  color: var(--mma-muted);
+  flex-shrink: 0;
+}
+
+.metrics-value {
+  font-weight: 600;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mma-surface);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 0.28s ease, background-color 0.25s ease;
+}
+
+.metrics-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--mma-muted);
+}
+
+.status-normal {
+  color: var(--mma-success);
+}
+
+.status-warning {
+  color: var(--mma-warning);
+}
+
+.status-critical {
+  color: var(--mma-critical);
+}
+
+.status-unknown {
+  color: var(--mma-accent);
+}

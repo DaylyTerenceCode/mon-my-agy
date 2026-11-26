@@ -1,0 +1,11 @@
+{
+  "name": "mon-my-agy",
+  "displayName": "Mon-My-Agy",
+  "version": "0.1.0",
+  "description": "Real-time Context Usage monitoring panel in the Auxiliary Side Pane, strictly adhering to the Official Extension Boundary.",
+  "suggestedPrompts": [
+    "Open the Mon-My-Agy Context Usage monitor",
+    "Check current conversation Context Usage",
+    "Show remaining context window capacity"
+  ]
+}
