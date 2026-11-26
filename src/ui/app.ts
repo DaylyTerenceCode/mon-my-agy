@@ -6,8 +6,15 @@ import {
 } from '@modelcontextprotocol/ext-apps';
 import {
   APP_QUERY_TOOL_NAME,
+  APP_SAVE_COLORS_TOOL_NAME,
+  CUSTOM_COLOR_KEYS,
+  normalizeHexColor,
+  sanitizeCustomColorPalette,
   type ConversationSummary,
   type ConversationTelemetry,
+  type CustomColorKey,
+  type CustomColorPalette,
+  type SaveColorPaletteInput,
   type StatusLevel,
   type TelemetrySnapshot,
 } from '../shared/types.js';
@@ -16,6 +23,40 @@ const EMPTY_GUIDANCE =
   '尚無已記錄的對話數據。完成一次對話回覆後將自動顯示 Context Usage。';
 const POLL_INTERVAL_MS = 3000;
 const TOAST_DURATION_MS = 2200;
+
+const COLOR_VAR_MAP: Record<CustomColorKey, string> = {
+  success: '--mma-success',
+  warning: '--mma-warning',
+  error: '--mma-critical',
+  cacheRead: '--mma-chart-1',
+  uncachedInput: '--mma-chart-2',
+  output: '--mma-chart-3',
+};
+
+const HOST_COLOR_VAR_MAP: Partial<Record<CustomColorKey, string>> = {
+  success: '--color-text-success',
+  warning: '--color-text-warning',
+  error: '--color-text-danger',
+};
+
+const THEME_DEFAULT_HEX: Record<'light' | 'dark', Record<CustomColorKey, string>> = {
+  light: {
+    success: '#15803d',
+    warning: '#b45309',
+    error: '#b91c1c',
+    cacheRead: '#1d4ed8',
+    uncachedInput: '#047857',
+    output: '#b45309',
+  },
+  dark: {
+    success: '#4ade80',
+    warning: '#fbbf24',
+    error: '#f87171',
+    cacheRead: '#60a5fa',
+    uncachedInput: '#34d399',
+    output: '#fbbf24',
+  },
+};
 
 function formatFull(n: number): string {
   return Math.max(0, Math.floor(n)).toLocaleString('en-US');
@@ -33,6 +74,10 @@ let pendingRequest: { conversationId?: string } | null = null;
 let pollTimerId: number | null = null;
 let toastTimerId: number | null = null;
 let confirmingCompact = false;
+let colorDrawerOpen = false;
+let customColors: CustomColorPalette = {};
+let isSavingColors = false;
+let pendingColorSave: SaveColorPaletteInput | null = null;
 let hasActiveTelemetry = false;
 let hostSupportsMessage = false;
 let isSendingCompact = false;
@@ -88,6 +133,106 @@ const STATUS_META: Record<Exclude<StatusLevel, 'empty'>, { label: string; barCol
   unknown: { label: '上限未知', barColor: 'var(--mma-accent)' },
 };
 
+function cssColorToHex(value: string): string | null {
+  const trimmed = value.trim();
+  const direct = normalizeHexColor(trimmed);
+  if (direct) return direct;
+
+  const shortHex = trimmed.match(/^#([0-9a-fA-F]{3})$/);
+  if (shortHex) {
+    const [r, g, b] = shortHex[1]!.split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+
+  const rgbMatch = trimmed.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/);
+  if (rgbMatch) {
+    const parts = [Number(rgbMatch[1]), Number(rgbMatch[2]), Number(rgbMatch[3])];
+    if (parts.every((n) => Number.isFinite(n) && n >= 0 && n <= 255)) {
+      return `#${parts.map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+    }
+  }
+  return null;
+}
+
+function getCurrentTheme(): 'light' | 'dark' {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+
+function getThemeDefaultHex(key: CustomColorKey): string {
+  const hostVar = HOST_COLOR_VAR_MAP[key];
+  if (hostVar) {
+    const inlineHostVal = document.documentElement.style.getPropertyValue(hostVar);
+    const parsedHost = cssColorToHex(inlineHostVal);
+    if (parsedHost) return parsedHost;
+  }
+  return THEME_DEFAULT_HEX[getCurrentTheme()][key];
+}
+
+function syncColorPickers(): void {
+  for (const key of CUSTOM_COLOR_KEYS) {
+    const hex = customColors[key] ?? getThemeDefaultHex(key);
+    const input = document.getElementById(`pick-${key}`) as HTMLInputElement | null;
+    const label = document.getElementById(`hex-${key}`);
+    if (input && input.value.toLowerCase() !== hex) {
+      input.value = hex;
+    }
+    if (label) {
+      label.textContent = hex;
+    }
+  }
+}
+
+function applyCustomColors(): void {
+  const rootStyle = document.documentElement.style;
+  for (const key of CUSTOM_COLOR_KEYS) {
+    const cssVar = COLOR_VAR_MAP[key];
+    const value = customColors[key];
+    if (value) {
+      rootStyle.setProperty(cssVar, value);
+    } else {
+      rootStyle.removeProperty(cssVar);
+    }
+  }
+  syncColorPickers();
+}
+
+function hydrateCustomColors(incoming: CustomColorPalette | undefined): void {
+  if (incoming === undefined || isSavingColors || pendingColorSave !== null) {
+    return;
+  }
+  customColors = sanitizeCustomColorPalette(incoming);
+  applyCustomColors();
+}
+
+async function persistColorPalette(payload: SaveColorPaletteInput): Promise<void> {
+  if (!appInstance) return;
+  if (isSavingColors) {
+    pendingColorSave = payload;
+    return;
+  }
+
+  isSavingColors = true;
+  try {
+    const args: Record<string, unknown> = payload.reset
+      ? { reset: true }
+      : { colors: payload.colors ?? {} };
+    await appInstance.callServerTool({
+      name: APP_SAVE_COLORS_TOOL_NAME,
+      arguments: args,
+    });
+  } catch (err) {
+    console.error('[mon-my-agy] Failed to persist custom color palette:', err);
+    showToast('保存配色失敗');
+  } finally {
+    isSavingColors = false;
+    if (pendingColorSave !== null) {
+      const next = pendingColorSave;
+      pendingColorSave = null;
+      void persistColorPalette(next);
+    }
+  }
+}
+
 function applyHostContext(ctx: McpUiHostContext | undefined): void {
   if (!ctx) return;
   if (ctx.theme) {
@@ -96,6 +241,7 @@ function applyHostContext(ctx: McpUiHostContext | undefined): void {
   if (ctx.styles?.variables) {
     applyHostStyleVariables(ctx.styles.variables);
   }
+  syncColorPickers();
 }
 
 function renderBreakdown(breakdownEl: HTMLElement, t: ConversationTelemetry): void {
@@ -152,7 +298,28 @@ function renderCumulative(
   syncCumulativeVisibility();
 }
 
+function setColorDrawerOpen(open: boolean): void {
+  if (open && confirmingCompact) {
+    setConfirmBarOpen(false);
+  }
+  colorDrawerOpen = open;
+  const drawer = document.getElementById('colorDrawer');
+  const toggleBtn = document.getElementById('colorToggleBtn');
+  if (drawer) {
+    drawer.classList.toggle('hidden', !open);
+  }
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-expanded', String(open));
+  }
+  if (open) {
+    syncColorPickers();
+  }
+}
+
 function setConfirmBarOpen(open: boolean): void {
+  if (open && colorDrawerOpen) {
+    setColorDrawerOpen(false);
+  }
   confirmingCompact = open;
   const confirmBar = document.getElementById('confirmBar');
   const compactBtn = document.getElementById('compactBtn');
@@ -256,6 +423,8 @@ function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
   ) {
     return;
   }
+
+  hydrateCustomColors(snapshot?.customColors);
 
   renderConversationSwitcher(
     snapshot?.conversations ?? [],
@@ -431,6 +600,45 @@ async function bootstrap(): Promise<void> {
       void requestSnapshot(selectedConversationId, true);
     });
   }
+
+  const colorToggleBtn = document.getElementById('colorToggleBtn');
+  if (colorToggleBtn) {
+    colorToggleBtn.addEventListener('click', () => {
+      setColorDrawerOpen(!colorDrawerOpen);
+    });
+  }
+
+  const closeColorsBtn = document.getElementById('closeColorsBtn');
+  if (closeColorsBtn) {
+    closeColorsBtn.addEventListener('click', () => {
+      setColorDrawerOpen(false);
+    });
+  }
+
+  const resetColorsBtn = document.getElementById('resetColorsBtn');
+  if (resetColorsBtn) {
+    resetColorsBtn.addEventListener('click', () => {
+      customColors = {};
+      applyCustomColors();
+      showToast('已重置為當前主題默認配色');
+      void persistColorPalette({ reset: true });
+    });
+  }
+
+  for (const key of CUSTOM_COLOR_KEYS) {
+    const picker = document.getElementById(`pick-${key}`) as HTMLInputElement | null;
+    if (picker) {
+      picker.addEventListener('input', () => {
+        const normalized = normalizeHexColor(picker.value);
+        if (!normalized) return;
+        customColors = { ...customColors, [key]: normalized };
+        applyCustomColors();
+        void persistColorPalette({ colors: { ...customColors } });
+      });
+    }
+  }
+
+  syncColorPickers();
 
   const convSelect = document.getElementById('convSelect') as HTMLSelectElement | null;
   if (convSelect) {

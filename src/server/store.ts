@@ -1,16 +1,20 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { isPositiveInteger, resolveContextWindowLimit } from '../shared/models.js';
 import {
   CONFIG_FILENAME,
   getStatusLevel,
   INDEX_FILENAME,
   isConversationIndexEntry,
+  sanitizeCustomColorPalette,
   type ConversationIndexEntry,
   type ConversationIndexFile,
   type ConversationSummary,
   type ConversationTelemetry,
+  type CustomColorPalette,
   type PluginConfig,
+  type SaveColorPaletteInput,
   type TelemetrySnapshot,
 } from '../shared/types.js';
 
@@ -92,7 +96,7 @@ async function readConversationIndex(dataDir: string): Promise<ConversationIndex
   }
 }
 
-async function readPluginConfig(dataDir: string): Promise<PluginConfig> {
+async function readRawConfigObject(dataDir: string): Promise<Record<string, unknown>> {
   try {
     const raw = await fs.readFile(path.join(dataDir, CONFIG_FILENAME), 'utf8');
     if (!raw.trim()) return {};
@@ -100,12 +104,18 @@ async function readPluginConfig(dataDir: string): Promise<PluginConfig> {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return {};
     }
-    const obj = parsed as Record<string, unknown>;
-    const rawLimits = obj.contextWindowLimits;
-    if (!rawLimits || typeof rawLimits !== 'object' || Array.isArray(rawLimits)) {
-      return {};
-    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
 
+async function readPluginConfig(dataDir: string): Promise<PluginConfig> {
+  const obj = await readRawConfigObject(dataDir);
+  const config: PluginConfig = {};
+
+  const rawLimits = obj.contextWindowLimits;
+  if (rawLimits && typeof rawLimits === 'object' && !Array.isArray(rawLimits)) {
     const contextWindowLimits: Record<string, number> = {};
     for (const [key, value] of Object.entries(rawLimits as Record<string, unknown>)) {
       const trimmedKey = key.trim();
@@ -113,10 +123,38 @@ async function readPluginConfig(dataDir: string): Promise<PluginConfig> {
         contextWindowLimits[trimmedKey] = value;
       }
     }
-    return { contextWindowLimits };
-  } catch {
-    return {};
+    config.contextWindowLimits = contextWindowLimits;
   }
+
+  config.customColors = sanitizeCustomColorPalette(obj.customColors);
+  return config;
+}
+
+export async function saveCustomColorPalette(
+  dataDir: string,
+  options: SaveColorPaletteInput,
+): Promise<CustomColorPalette> {
+  const rawObj = await readRawConfigObject(dataDir);
+  const nextPalette: CustomColorPalette = options.reset
+    ? {}
+    : sanitizeCustomColorPalette(options.colors);
+
+  if (Object.keys(nextPalette).length === 0) {
+    delete rawObj.customColors;
+  } else {
+    rawObj.customColors = nextPalette;
+  }
+
+  await fs.mkdir(dataDir, { recursive: true });
+  const targetPath = path.join(dataDir, CONFIG_FILENAME);
+  const tmpPath = path.join(
+    dataDir,
+    `${CONFIG_FILENAME}.tmp.${process.pid}.${crypto.randomBytes(4).toString('hex')}`,
+  );
+  await fs.writeFile(tmpPath, JSON.stringify(rawObj, null, 2) + '\n', 'utf8');
+  await fs.rename(tmpPath, targetPath);
+
+  return nextPalette;
 }
 
 async function parseTranscriptTelemetry(
@@ -180,7 +218,11 @@ export async function readTelemetrySnapshot(
   dataDir: string,
   requestedConversationId?: string,
 ): Promise<TelemetrySnapshot> {
-  const entries = await readConversationIndex(dataDir);
+  const [entries, config] = await Promise.all([
+    readConversationIndex(dataDir),
+    readPluginConfig(dataDir),
+  ]);
+  const customColors = config.customColors ?? {};
   const conversations: ConversationSummary[] = entries.map((e) => ({
     conversationId: e.conversationId,
     modelName: e.modelName,
@@ -194,6 +236,7 @@ export async function readTelemetrySnapshot(
       conversations: [],
       telemetry: null,
       statusLevel: 'empty',
+      customColors,
     };
   }
 
@@ -202,7 +245,6 @@ export async function readTelemetrySnapshot(
       ? entries.find((e) => e.conversationId === requestedConversationId)
       : undefined) ?? entries[0]!;
 
-  const config = await readPluginConfig(dataDir);
   const telemetry = await parseTranscriptTelemetry(target, config.contextWindowLimits);
   if (!telemetry) {
     return {
@@ -210,6 +252,7 @@ export async function readTelemetrySnapshot(
       conversations,
       telemetry: null,
       statusLevel: 'empty',
+      customColors,
     };
   }
 
@@ -218,5 +261,6 @@ export async function readTelemetrySnapshot(
     conversations,
     telemetry,
     statusLevel: getStatusLevel(telemetry.utilizationPct),
+    customColors,
   };
 }

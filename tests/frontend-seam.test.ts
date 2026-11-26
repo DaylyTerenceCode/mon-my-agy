@@ -3,7 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
-import { APP_QUERY_TOOL_NAME, type TelemetrySnapshot } from '../src/shared/types.js';
+import {
+  APP_QUERY_TOOL_NAME,
+  APP_SAVE_COLORS_TOOL_NAME,
+  type TelemetrySnapshot,
+} from '../src/shared/types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const builtHtmlPath = path.resolve(__dirname, '../dist/app.html');
@@ -21,9 +25,10 @@ interface SentMessageRecord {
 interface MountOptions {
   initialHidden?: boolean;
   hostCapabilities?: Record<string, unknown>;
+  initialHostContext?: Record<string, unknown>;
   onToolCall?: (
     call: ToolCallRecord,
-  ) => TelemetrySnapshot | Promise<TelemetrySnapshot>;
+  ) => Record<string, unknown> | TelemetrySnapshot | Promise<Record<string, unknown> | TelemetrySnapshot>;
 }
 
 interface MountedApp {
@@ -31,6 +36,7 @@ interface MountedApp {
   toolCalls: ToolCallRecord[];
   sentMessages: SentMessageRecord[];
   sendToolResult: (snapshot: TelemetrySnapshot) => Promise<void>;
+  sendHostContextChanged: (hostContext: Record<string, unknown>) => Promise<void>;
   setHidden: (hidden: boolean) => void;
   advanceIntervals: () => Promise<void>;
   activeIntervalCount: () => number;
@@ -116,7 +122,7 @@ async function mountBuiltApp(options: MountOptions = {}): Promise<MountedApp> {
                         serverTools: {},
                         message: {},
                       },
-                      hostContext: {
+                      hostContext: options.initialHostContext ?? {
                         theme: 'dark',
                         displayMode: 'inline',
                         styles: {
@@ -144,15 +150,15 @@ async function mountBuiltApp(options: MountOptions = {}): Promise<MountedApp> {
             };
             toolCalls.push(record);
             const requestId = msg.id;
-            const respond = (snapshot: TelemetrySnapshot) => {
+            const respond = (payload: Record<string, unknown> | TelemetrySnapshot) => {
               win.dispatchEvent(
                 new win.MessageEvent('message', {
                   data: {
                     jsonrpc: '2.0',
                     id: requestId,
                     result: {
-                      content: [{ type: 'text', text: 'snapshot' }],
-                      structuredContent: snapshot,
+                      content: [{ type: 'text', text: 'ok' }],
+                      structuredContent: payload,
                     },
                   },
                   source: hostParent as unknown as Window,
@@ -222,6 +228,20 @@ async function mountBuiltApp(options: MountOptions = {}): Promise<MountedApp> {
               content: [{ type: 'text', text: 'snapshot' }],
               structuredContent: snapshot,
             },
+          },
+          source: win.parent as unknown as Window,
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 10));
+    },
+    async sendHostContextChanged(hostContext: Record<string, unknown>) {
+      const win = dom.window;
+      win.dispatchEvent(
+        new win.MessageEvent('message', {
+          data: {
+            jsonrpc: '2.0',
+            method: 'ui/notifications/host-context-changed',
+            params: hostContext,
           },
           source: win.parent as unknown as Window,
         }),
@@ -1121,5 +1141,245 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     compactBtn?.click();
     expect(confirmBar?.classList.contains('hidden')).toBe(true);
     expect(app.sentMessages).toHaveLength(0);
+  });
+
+  it('follows host light/dark theme and accent changes via host context and satisfies WCAG AA contrast (>= 4.5:1) on fallback palettes', async () => {
+    function hexToRgb(hex: string): [number, number, number] {
+      const clean = hex.replace('#', '');
+      return [
+        parseInt(clean.slice(0, 2), 16),
+        parseInt(clean.slice(2, 4), 16),
+        parseInt(clean.slice(4, 6), 16),
+      ];
+    }
+
+    function relativeLuminance(rgb: [number, number, number]): number {
+      const [r, g, b] = rgb.map((c) => {
+        const s = c / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    }
+
+    function contrastRatio(fg: [number, number, number], bg: [number, number, number]): number {
+      const l1 = relativeLuminance(fg);
+      const l2 = relativeLuminance(bg);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    }
+
+    function alphaBlend(
+      top: [number, number, number],
+      alpha: number,
+      bottom: [number, number, number],
+    ): [number, number, number] {
+      return [
+        Math.round(top[0] * alpha + bottom[0] * (1 - alpha)),
+        Math.round(top[1] * alpha + bottom[1] * (1 - alpha)),
+        Math.round(top[2] * alpha + bottom[2] * (1 - alpha)),
+      ];
+    }
+
+    function extractFallbackHex(css: string, blockRe: RegExp, varName: string): string {
+      const blockMatch = css.match(blockRe);
+      expect(blockMatch, `Missing CSS block ${blockRe}`).not.toBeNull();
+      const varRe = new RegExp(`${varName}:\\s*[^;]*?(#[0-9a-fA-F]{6})`);
+      const m = blockMatch![1]!.match(varRe);
+      expect(m, `Missing fallback hex for ${varName}`).not.toBeNull();
+      return m![1]!;
+    }
+
+    // 1. Verify built CSS fallback palettes satisfy WCAG AA (>= 4.5:1) in both light and dark modes
+    const html = await fs.readFile(builtHtmlPath, 'utf8');
+    const lightBlock = /:root\s*\{([^}]+)\}/;
+    const darkBlock = /:root\[data-theme="dark"\]\s*\{([^}]+)\}/;
+
+    for (const block of [lightBlock, darkBlock]) {
+      const card = hexToRgb(extractFallbackHex(html, block, '--mma-card'));
+      const surface = hexToRgb(extractFallbackHex(html, block, '--mma-surface'));
+      const fg = hexToRgb(extractFallbackHex(html, block, '--mma-fg'));
+      const muted = hexToRgb(extractFallbackHex(html, block, '--mma-muted'));
+      const accent = hexToRgb(extractFallbackHex(html, block, '--mma-accent'));
+      const accentFg = hexToRgb(extractFallbackHex(html, block, '--mma-accent-fg'));
+      const success = hexToRgb(extractFallbackHex(html, block, '--mma-success'));
+      const warning = hexToRgb(extractFallbackHex(html, block, '--mma-warning'));
+      const critical = hexToRgb(extractFallbackHex(html, block, '--mma-critical'));
+
+      expect(contrastRatio(fg, card)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(muted, card)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(muted, surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(accent, card)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(accentFg, accent)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(success, card)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(warning, card)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(critical, card)).toBeGreaterThanOrEqual(4.5);
+
+      // /compact liquid-fill background (20% fill over card) with muted icon & hover fg icon
+      for (const fill of [success, warning, critical]) {
+        const blendedBg = alphaBlend(fill, 0.2, card);
+        expect(contrastRatio(muted, blendedBg)).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(fg, blendedBg)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+
+    // 2. Verify runtime host theme & accent switching via ui/initialize and host-context-changed
+    const app = await mountBuiltApp({
+      initialHostContext: {
+        theme: 'dark',
+        displayMode: 'inline',
+        styles: {
+          variables: {
+            '--color-ring-primary': '#60a5fa',
+          },
+        },
+      },
+    });
+    openApps.push(app);
+    const root = app.dom.window.document.documentElement;
+
+    expect(root.getAttribute('data-theme')).toBe('dark');
+    expect(root.style.getPropertyValue('--color-ring-primary').trim()).toBe('#60a5fa');
+
+    await app.sendHostContextChanged({
+      theme: 'light',
+      styles: {
+        variables: {
+          '--color-ring-primary': '#6d28d9',
+        },
+      },
+    });
+
+    expect(root.getAttribute('data-theme')).toBe('light');
+    expect(root.style.getPropertyValue('--color-ring-primary').trim()).toBe('#6d28d9');
+  });
+
+  it('toggles 6-color inline palette drawer mutually exclusively with /compact confirm bar, previews live, resets, and persists via app-only tool', async () => {
+    const app = await mountBuiltApp({
+      onToolCall: (call) => {
+        if (call.name === APP_SAVE_COLORS_TOOL_NAME) {
+          return {
+            customColors: call.arguments?.reset ? {} : (call.arguments?.colors ?? {}),
+          };
+        }
+        return {
+          activeConversationId: null,
+          conversations: [],
+          telemetry: null,
+          statusLevel: 'empty',
+          customColors: {},
+        };
+      },
+    });
+    openApps.push(app);
+    const doc = app.dom.window.document;
+    const root = doc.documentElement;
+
+    await app.sendToolResult({
+      activeConversationId: 'conv-colors',
+      conversations: [
+        {
+          conversationId: 'conv-colors',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Color Palette Session',
+          lastActiveAt: '2026-11-26T07:00:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 10000,
+        cacheRead: 30000,
+        output: 1000,
+        contextUsage: 41000,
+        utilizationPct: 20.5,
+        remainingTokens: 159000,
+        cacheHitRate: 75.0,
+        cumulative: { uncachedInput: 10000, cacheRead: 30000, output: 1000, total: 41000 },
+      },
+      statusLevel: 'normal',
+      customColors: {
+        success: '#16a34a',
+        cacheRead: '#2563eb',
+      },
+    });
+
+    // 1. Hydrated customColors from snapshot applied to root CSS variables & picker inputs
+    expect(root.style.getPropertyValue('--mma-success').trim()).toBe('#16a34a');
+    expect(root.style.getPropertyValue('--mma-chart-1').trim()).toBe('#2563eb');
+    expect((doc.getElementById('pick-success') as HTMLInputElement | null)?.value).toBe('#16a34a');
+    expect(doc.getElementById('hex-success')?.textContent?.trim()).toBe('#16a34a');
+    expect((doc.getElementById('pick-cacheRead') as HTMLInputElement | null)?.value).toBe('#2563eb');
+    expect(doc.getElementById('hex-cacheRead')?.textContent?.trim()).toBe('#2563eb');
+
+    // 2. Colors button attributes and mutual exclusivity with /compact confirmation bar
+    const colorToggleBtn = doc.getElementById('colorToggleBtn') as HTMLButtonElement | null;
+    const colorDrawer = doc.getElementById('colorDrawer') as HTMLElement | null;
+    const compactBtn = doc.getElementById('compactBtn') as HTMLButtonElement | null;
+    const confirmBar = doc.getElementById('confirmBar') as HTMLElement | null;
+
+    expect(colorToggleBtn).not.toBeNull();
+    expect(colorToggleBtn?.getAttribute('title')).toBe('Colors');
+    expect(colorToggleBtn?.getAttribute('aria-label')).toBe('Colors');
+    expect(colorToggleBtn?.querySelector('svg')).not.toBeNull();
+    expect(colorDrawer?.classList.contains('hidden')).toBe(true);
+
+    // Open color drawer
+    colorToggleBtn?.click();
+    expect(colorDrawer?.classList.contains('hidden')).toBe(false);
+    expect(confirmBar?.classList.contains('hidden')).toBe(true);
+
+    // Clicking /compact closes color drawer and opens confirm bar
+    compactBtn?.click();
+    expect(confirmBar?.classList.contains('hidden')).toBe(false);
+    expect(colorDrawer?.classList.contains('hidden')).toBe(true);
+
+    // Clicking Colors closes confirm bar and re-opens color drawer
+    colorToggleBtn?.click();
+    expect(colorDrawer?.classList.contains('hidden')).toBe(false);
+    expect(confirmBar?.classList.contains('hidden')).toBe(true);
+
+    // 3. Live picking updates CSS variable, Hex label, and persists via save_color_palette
+    const warningPicker = doc.getElementById('pick-warning') as HTMLInputElement | null;
+    expect(warningPicker).not.toBeNull();
+    warningPicker!.value = '#d97706';
+    warningPicker!.dispatchEvent(new app.dom.window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(root.style.getPropertyValue('--mma-warning').trim()).toBe('#d97706');
+    expect(doc.getElementById('hex-warning')?.textContent?.trim()).toBe('#d97706');
+    expect(app.toolCalls).toContainEqual({
+      name: APP_SAVE_COLORS_TOOL_NAME,
+      arguments: {
+        colors: {
+          success: '#16a34a',
+          cacheRead: '#2563eb',
+          warning: '#d97706',
+        },
+      },
+    });
+
+    // 4. Reset restores theme defaults, clears overrides, and persists reset: true
+    const resetColorsBtn = doc.getElementById('resetColorsBtn') as HTMLButtonElement | null;
+    expect(resetColorsBtn).not.toBeNull();
+    resetColorsBtn?.click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(root.style.getPropertyValue('--mma-success').trim()).toBe('');
+    expect(root.style.getPropertyValue('--mma-warning').trim()).toBe('');
+    expect(root.style.getPropertyValue('--mma-chart-1').trim()).toBe('');
+    expect(doc.getElementById('hex-success')?.textContent?.trim()).toBe('#4ade80');
+    expect(app.toolCalls).toContainEqual({
+      name: APP_SAVE_COLORS_TOOL_NAME,
+      arguments: { reset: true },
+    });
+
+    // Switching host theme to light updates default picker hex labels
+    await app.sendHostContextChanged({ theme: 'light' });
+    expect(doc.getElementById('hex-success')?.textContent?.trim()).toBe('#15803d');
+
+    // 5. Clicking Done closes the drawer
+    const closeColorsBtn = doc.getElementById('closeColorsBtn') as HTMLButtonElement | null;
+    expect(closeColorsBtn).not.toBeNull();
+    closeColorsBtn?.click();
+    expect(colorDrawer?.classList.contains('hidden')).toBe(true);
   });
 });

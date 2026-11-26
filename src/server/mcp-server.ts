@@ -5,12 +5,16 @@ import {
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
-import { readTelemetrySnapshot } from './store.js';
-import { APP_QUERY_TOOL_NAME, type TelemetrySnapshot } from '../shared/types.js';
+import { readTelemetrySnapshot, saveCustomColorPalette } from './store.js';
+import {
+  APP_QUERY_TOOL_NAME,
+  APP_SAVE_COLORS_TOOL_NAME,
+  type TelemetrySnapshot,
+} from '../shared/types.js';
 
 export const APP_RESOURCE_URI = 'ui://mon-my-agy/context-usage.html';
 export const ENTRYPOINT_TOOL_NAME = 'open_context_usage';
-export { APP_QUERY_TOOL_NAME };
+export { APP_QUERY_TOOL_NAME, APP_SAVE_COLORS_TOOL_NAME };
 
 export interface CreateMcpServerOptions {
   dataDir: string;
@@ -122,6 +126,48 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       },
     },
     async (args) => handleTelemetryQuery(args.conversationId),
+  );
+
+  registerAppTool(
+    server,
+    APP_SAVE_COLORS_TOOL_NAME,
+    {
+      title: 'Save Custom Color Palette',
+      description: 'App-only tool to persist or reset the 6-color custom palette in config.json.',
+      inputSchema: {
+        colors: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe('Optional 6-color Hex overrides for status levels and token breakdown'),
+        reset: z
+          .boolean()
+          .optional()
+          .describe('When true, resets custom colors to the current host theme defaults'),
+      },
+      _meta: {
+        ui: {
+          resourceUri: APP_RESOURCE_URI,
+          visibility: ['app'],
+        },
+      },
+    },
+    async (args) => {
+      const customColors = await saveCustomColorPalette(options.dataDir, {
+        colors: args.colors,
+        reset: args.reset,
+      });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: args.reset
+              ? 'Mon-My-Agy: Custom color palette reset to theme defaults.'
+              : 'Mon-My-Agy: Custom color palette saved.',
+          },
+        ],
+        structuredContent: { customColors },
+      };
+    },
   );
 
   return server;

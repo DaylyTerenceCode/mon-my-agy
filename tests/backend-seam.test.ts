@@ -13,8 +13,9 @@ import {
   APP_RESOURCE_URI,
   ENTRYPOINT_TOOL_NAME,
   APP_QUERY_TOOL_NAME,
+  APP_SAVE_COLORS_TOOL_NAME,
 } from '../src/server/mcp-server.js';
-import type { TelemetrySnapshot } from '../src/shared/types.js';
+import type { CustomColorPalette, TelemetrySnapshot } from '../src/shared/types.js';
 
 const builtAppHtmlPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/app.html');
 
@@ -752,6 +753,147 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       const fallbackSnapshot = fallbackRes.structuredContent as unknown as TelemetrySnapshot;
       expect(fallbackSnapshot.activeConversationId).toBe('conv-new');
       expect(fallbackSnapshot.telemetry?.contextUsage).toBe(186000);
+    } finally {
+      await close();
+    }
+  });
+
+  it('persists, hydrates, and resets 6-color custom palette via app-only tool while preserving config.json Context Window Limits', async () => {
+    const transcriptPath = path.join(tmpDir, 'palette-session.jsonl');
+    await fs.writeFile(
+      transcriptPath,
+      JSON.stringify({
+        step_index: 1,
+        model: 'custom-palette-model',
+        input_tokens: 20000,
+        cache_read_tokens: 30000,
+        output_tokens: 1000,
+      }) + '\n',
+      'utf8',
+    );
+    await runHookIndexer(
+      JSON.stringify({
+        conversationId: 'conv-palette',
+        modelName: 'custom-palette-model',
+        transcriptPath,
+      }),
+      pluginDataDir,
+    );
+
+    // Pre-existing Context Window Limit override in config.json must not be clobbered
+    const configPath = path.join(pluginDataDir, 'config.json');
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        contextWindowLimits: {
+          'custom-palette-model': 100000,
+        },
+      }),
+      'utf8',
+    );
+
+    const { client, close } = await connectClient(pluginDataDir);
+    try {
+      // 1. Tool metadata declares visibility: ["app"]
+      const { tools } = await client.listTools();
+      const saveTool = tools.find((t) => t.name === APP_SAVE_COLORS_TOOL_NAME);
+      expect(saveTool).toBeDefined();
+      const meta = saveTool?._meta as Record<string, unknown> | undefined;
+      const uiMeta = meta?.ui as { visibility?: string[] } | undefined;
+      expect(uiMeta?.visibility).toEqual(['app']);
+
+      // 2. Save all 6 custom colors (mixed case normalized to lowercase)
+      const palette: CustomColorPalette = {
+        success: '#16A34A',
+        warning: '#D97706',
+        error: '#DC2626',
+        cacheRead: '#2563EB',
+        uncachedInput: '#059669',
+        output: '#EA580C',
+      };
+      const saveRes = await client.callTool({
+        name: APP_SAVE_COLORS_TOOL_NAME,
+        arguments: { colors: palette },
+      });
+      expect(saveRes.isError).toBeFalsy();
+      const savedStructured = saveRes.structuredContent as { customColors?: CustomColorPalette };
+      expect(savedStructured.customColors).toEqual({
+        success: '#16a34a',
+        warning: '#d97706',
+        error: '#dc2626',
+        cacheRead: '#2563eb',
+        uncachedInput: '#059669',
+        output: '#ea580c',
+      });
+
+      // 3. Both entrypoint tool and app query tool return saved palette AND preserve Context Window Limit
+      const entryRes = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      const entrySnapshot = entryRes.structuredContent as unknown as TelemetrySnapshot;
+      expect(entrySnapshot.telemetry?.limit).toBe(100000);
+      expect(entrySnapshot.customColors).toEqual({
+        success: '#16a34a',
+        warning: '#d97706',
+        error: '#dc2626',
+        cacheRead: '#2563eb',
+        uncachedInput: '#059669',
+        output: '#ea580c',
+      });
+
+      const queryRes = await client.callTool({ name: APP_QUERY_TOOL_NAME, arguments: {} });
+      const querySnapshot = queryRes.structuredContent as unknown as TelemetrySnapshot;
+      expect(querySnapshot.customColors).toEqual(entrySnapshot.customColors);
+
+      // 4. Reset clears customColors while keeping contextWindowLimits intact
+      const resetRes = await client.callTool({
+        name: APP_SAVE_COLORS_TOOL_NAME,
+        arguments: { reset: true },
+      });
+      expect(resetRes.isError).toBeFalsy();
+      expect((resetRes.structuredContent as { customColors?: CustomColorPalette }).customColors).toEqual({});
+
+      const afterResetRes = await client.callTool({ name: APP_QUERY_TOOL_NAME, arguments: {} });
+      const afterResetSnapshot = afterResetRes.structuredContent as unknown as TelemetrySnapshot;
+      expect(afterResetSnapshot.customColors).toEqual({});
+      expect(afterResetSnapshot.telemetry?.limit).toBe(100000);
+
+      // 5. Partial invalid colors in config.json are ignored while valid siblings survive
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          contextWindowLimits: { 'custom-palette-model': 100000 },
+          customColors: {
+            success: '#123456',
+            warning: 'not-a-hex',
+            error: '#fff',
+            cacheRead: 42,
+            unknownKey: '#abcdef',
+          },
+        }),
+        'utf8',
+      );
+      const sanitizedRes = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      const sanitizedSnapshot = sanitizedRes.structuredContent as unknown as TelemetrySnapshot;
+      expect(sanitizedSnapshot.customColors).toEqual({ success: '#123456' });
+      expect(sanitizedSnapshot.telemetry?.limit).toBe(100000);
+    } finally {
+      await close();
+    }
+  });
+
+  it('returns saved customColors even when no conversations are indexed (empty state)', async () => {
+    await fs.mkdir(pluginDataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginDataDir, 'config.json'),
+      JSON.stringify({ customColors: { success: '#10b981' } }),
+      'utf8',
+    );
+
+    const { client, close } = await connectClient(pluginDataDir);
+    try {
+      const res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      const snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.statusLevel).toBe('empty');
+      expect(snapshot.customColors).toEqual({ success: '#10b981' });
     } finally {
       await close();
     }

@@ -1,9 +1,59 @@
 export const INDEX_FILENAME = 'index.json';
 export const CONFIG_FILENAME = 'config.json';
 export const APP_QUERY_TOOL_NAME = 'get_context_usage';
+export const APP_SAVE_COLORS_TOOL_NAME = 'save_color_palette';
+
+export type CustomColorKey =
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'cacheRead'
+  | 'uncachedInput'
+  | 'output';
+
+export const CUSTOM_COLOR_KEYS: readonly CustomColorKey[] = [
+  'success',
+  'warning',
+  'error',
+  'cacheRead',
+  'uncachedInput',
+  'output',
+] as const;
+
+export type CustomColorPalette = Partial<Record<CustomColorKey, string>>;
+
+export interface SaveColorPaletteInput {
+  colors?: CustomColorPalette;
+  reset?: boolean;
+}
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+export function normalizeHexColor(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!HEX_COLOR_RE.test(trimmed)) return null;
+  return trimmed.toLowerCase();
+}
+
+export function sanitizeCustomColorPalette(input: unknown): CustomColorPalette {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return {};
+  }
+  const obj = input as Record<string, unknown>;
+  const result: CustomColorPalette = {};
+  for (const key of CUSTOM_COLOR_KEYS) {
+    const normalized = normalizeHexColor(obj[key]);
+    if (normalized) {
+      result[key] = normalized;
+    }
+  }
+  return result;
+}
 
 export interface PluginConfig {
   contextWindowLimits?: Record<string, number>;
+  customColors?: CustomColorPalette;
 }
 
 export type StatusLevel = 'empty' | 'unknown' | 'normal' | 'warning' | 'critical';
@@ -58,6 +108,7 @@ export interface TelemetrySnapshot {
   conversations: ConversationSummary[];
   telemetry: ConversationTelemetry | null;
   statusLevel: StatusLevel;
+  customColors?: CustomColorPalette;
 }
 
 export function isConversationIndexEntry(entry: unknown): entry is ConversationIndexEntry {

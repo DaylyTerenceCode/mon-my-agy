@@ -45,6 +45,22 @@
             <path d="M13.25 2.75v2.5h-2.5" />
           </svg>
         </button>
+        <button
+          id="colorToggleBtn"
+          class="icon-btn"
+          type="button"
+          aria-label="Colors"
+          title="Colors"
+          aria-expanded="false"
+          aria-controls="colorDrawer"
+        >
+          <svg class="icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 1.75a6.25 6.25 0 0 0 0 12.5h.75a1.5 1.5 0 0 0 1.06-2.56 1.5 1.5 0 0 1 1.06-2.56h1.38A2 2 0 0 0 14.25 7.1 6.25 6.25 0 0 0 8 1.75Z" />
+            <circle cx="5.25" cy="6.25" r="0.65" fill="currentColor" stroke="none" />
+            <circle cx="8" cy="4.75" r="0.65" fill="currentColor" stroke="none" />
+            <circle cx="10.75" cy="6.25" r="0.65" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -53,6 +69,66 @@
       <div class="confirm-actions">
         <button id="cancelCompactBtn" class="btn-secondary" type="button">取消</button>
         <button id="confirmCompactBtn" class="btn-primary" type="button">確認</button>
+      </div>
+    </div>
+
+    <div id="colorDrawer" class="color-drawer hidden" role="region" aria-label="自定義配色">
+      <div class="color-drawer-header">
+        <span class="color-drawer-title">自定義配色</span>
+        <div class="color-drawer-actions">
+          <button id="resetColorsBtn" class="btn-secondary" type="button">重置</button>
+          <button id="closeColorsBtn" class="btn-primary" type="button">完成</button>
+        </div>
+      </div>
+      <div class="color-drawer-grid">
+        <div class="color-group">
+          <div class="color-group-title">上下文水位</div>
+          <label class="color-row">
+            <span class="color-label">健康水位</span>
+            <span class="color-control">
+              <code id="hex-success" class="color-hex tabular-nums"></code>
+              <input id="pick-success" data-color-key="success" type="color" class="color-picker" aria-label="健康水位顏色" />
+            </span>
+          </label>
+          <label class="color-row">
+            <span class="color-label">預警水位</span>
+            <span class="color-control">
+              <code id="hex-warning" class="color-hex tabular-nums"></code>
+              <input id="pick-warning" data-color-key="warning" type="color" class="color-picker" aria-label="預警水位顏色" />
+            </span>
+          </label>
+          <label class="color-row">
+            <span class="color-label">危險水位</span>
+            <span class="color-control">
+              <code id="hex-error" class="color-hex tabular-nums"></code>
+              <input id="pick-error" data-color-key="error" type="color" class="color-picker" aria-label="危險水位顏色" />
+            </span>
+          </label>
+        </div>
+        <div class="color-group">
+          <div class="color-group-title">Token 結構</div>
+          <label class="color-row">
+            <span class="color-label">Cache</span>
+            <span class="color-control">
+              <code id="hex-cacheRead" class="color-hex tabular-nums"></code>
+              <input id="pick-cacheRead" data-color-key="cacheRead" type="color" class="color-picker" aria-label="Cache Read 顏色" />
+            </span>
+          </label>
+          <label class="color-row">
+            <span class="color-label">Input</span>
+            <span class="color-control">
+              <code id="hex-uncachedInput" class="color-hex tabular-nums"></code>
+              <input id="pick-uncachedInput" data-color-key="uncachedInput" type="color" class="color-picker" aria-label="Uncached Input 顏色" />
+            </span>
+          </label>
+          <label class="color-row">
+            <span class="color-label">Output</span>
+            <span class="color-control">
+              <code id="hex-output" class="color-hex tabular-nums"></code>
+              <input id="pick-output" data-color-key="output" type="color" class="color-picker" aria-label="Output 顏色" />
+            </span>
+          </label>
+        </div>
       </div>
     </div>
 
