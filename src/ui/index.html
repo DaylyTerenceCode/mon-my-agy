@@ -20,6 +20,25 @@
       <section id="modPrimary" class="mod-primary" aria-live="polite">
         <div class="empty-state">尚無已記錄的對話數據。完成一次對話回覆後將自動顯示 Context Usage。</div>
       </section>
+      <section id="modBreakdown" class="mod-section hidden" aria-label="Token 結構分解"></section>
+      <section id="modCumulative" class="mod-section mod-cumulative hidden" aria-label="會話累計消耗">
+        <div class="section-header">
+          <button
+            id="toggleCumulativeBtn"
+            class="cumulative-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="cumulativeTotal cumulativeDetails"
+          >
+            <svg class="chevron-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 6l4 4 4-4" />
+            </svg>
+            <span class="section-title">會話累計消耗</span>
+          </button>
+          <span id="cumulativeTotal" class="cumulative-total tabular-nums"></span>
+        </div>
+        <div id="cumulativeDetails" class="cumulative-breakdown tabular-nums"></div>
+      </section>
     </div>
   </main>
 

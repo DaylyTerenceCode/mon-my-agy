@@ -120,6 +120,8 @@ async function parseTranscriptTelemetry(
   const contextUsage = latest.uncachedInput + latest.cacheRead + latest.output;
   const utilizationPct = limit !== null && limit > 0 ? (contextUsage / limit) * 100 : null;
   const remainingTokens = limit !== null ? Math.max(0, limit - contextUsage) : null;
+  const totalInput = latest.uncachedInput + latest.cacheRead;
+  const cacheHitRate = totalInput > 0 ? (latest.cacheRead / totalInput) * 100 : 0;
 
   return {
     model,
@@ -130,10 +132,12 @@ async function parseTranscriptTelemetry(
     contextUsage,
     utilizationPct,
     remainingTokens,
+    cacheHitRate,
     cumulative: {
       uncachedInput: cumulativeUncached,
       cacheRead: cumulativeCacheRead,
       output: cumulativeOutput,
+      total: cumulativeUncached + cumulativeCacheRead + cumulativeOutput,
     },
   };
 }

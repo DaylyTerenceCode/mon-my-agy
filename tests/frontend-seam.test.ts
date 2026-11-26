@@ -154,6 +154,8 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     expect(doc.getElementById('modelBadge')?.textContent?.trim()).toBe('waiting');
     expect(doc.getElementById('modPrimary')?.textContent).toContain('尚無已記錄的對話數據');
     expect(doc.getElementById('modPrimary')?.textContent).not.toContain('CTX_WINDOW');
+    expect(doc.getElementById('modBreakdown')?.classList.contains('hidden')).toBe(true);
+    expect(doc.getElementById('modCumulative')?.classList.contains('hidden')).toBe(true);
   });
 
   it('renders normal (<70%), warning (70%-84.9%), and critical (>=85%) Context Usage states with tabular-nums', async () => {
@@ -181,7 +183,8 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
         contextUsage: 42615,
         utilizationPct: 21.3075,
         remainingTokens: 157385,
-        cumulative: { uncachedInput: 52410, cacheRead: 98120, output: 4820 },
+        cacheHitRate: 74.638,
+        cumulative: { uncachedInput: 52410, cacheRead: 98120, output: 4820, total: 155350 },
       },
       statusLevel: 'normal',
     });
@@ -208,7 +211,8 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
         contextUsage: 156000,
         utilizationPct: 78.0,
         remainingTokens: 44000,
-        cumulative: { uncachedInput: 164200, cacheRead: 512000, output: 19400 },
+        cacheHitRate: 83.812,
+        cumulative: { uncachedInput: 164200, cacheRead: 512000, output: 19400, total: 695600 },
       },
       statusLevel: 'warning',
     });
@@ -232,7 +236,8 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
         contextUsage: 186000,
         utilizationPct: 93.0,
         remainingTokens: 14000,
-        cumulative: { uncachedInput: 215000, cacheRead: 842000, output: 28600 },
+        cacheHitRate: 89.8741,
+        cumulative: { uncachedInput: 215000, cacheRead: 842000, output: 28600, total: 1085600 },
       },
       statusLevel: 'critical',
     });
@@ -242,5 +247,184 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     expect(primaryTextCrit).toContain('186,000 / 200,000 (93.0%)');
     expect(primaryTextCrit).toContain('危險水位');
     expect(primaryTextCrit).toContain('FREE: 14,000');
+  });
+
+  it('renders Module 2 Token Breakdown with Cache Hit Rate, 3-segment stacked bar, comma-formatted rows, and zero-input boundary', async () => {
+    const app = await mountBuiltApp();
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    await app.sendToolResult({
+      activeConversationId: 'conv-breakdown',
+      conversations: [
+        {
+          conversationId: 'conv-breakdown',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Breakdown Session',
+          lastActiveAt: '2026-11-26T04:00:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 10649,
+        cacheRead: 31339,
+        output: 627,
+        contextUsage: 42615,
+        utilizationPct: 21.3075,
+        remainingTokens: 157385,
+        cacheHitRate: 74.638,
+        cumulative: { uncachedInput: 52410, cacheRead: 98120, output: 4820, total: 155350 },
+      },
+      statusLevel: 'normal',
+    });
+
+    const breakdownEl = doc.getElementById('modBreakdown');
+    expect(breakdownEl).not.toBeNull();
+    expect(breakdownEl?.classList.contains('hidden')).toBe(false);
+
+    const text = breakdownEl?.textContent ?? '';
+    expect(text).toContain('Token 結構分解');
+    expect(text).toContain('緩存命中率');
+    expect(text).toContain('74.6%');
+    expect(text).toContain('Cache Read');
+    expect(text).toContain('31,339');
+    expect(text).toContain('Uncached Input');
+    expect(text).toContain('10,649');
+    expect(text).toContain('Output');
+    expect(text).toContain('627');
+    expect(breakdownEl?.querySelectorAll('.tabular-nums').length).toBeGreaterThanOrEqual(4);
+
+    const cacheSeg = breakdownEl?.querySelector<HTMLElement>('[title="Cache Read"]');
+    const inputSeg = breakdownEl?.querySelector<HTMLElement>('[title="Uncached Input"]');
+    const outputSeg = breakdownEl?.querySelector<HTMLElement>('[title="Output"]');
+    expect(parseFloat(cacheSeg?.style.width ?? '0')).toBeCloseTo(73.54, 1);
+    expect(parseFloat(inputSeg?.style.width ?? '0')).toBeCloseTo(24.99, 1);
+    expect(parseFloat(outputSeg?.style.width ?? '0')).toBeCloseTo(1.47, 1);
+
+    // Zero-input and zero-usage boundary (must render 0.0% and 0% widths without NaN)
+    await app.sendToolResult({
+      activeConversationId: 'conv-zero',
+      conversations: [],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 0,
+        cacheRead: 0,
+        output: 0,
+        contextUsage: 0,
+        utilizationPct: 0,
+        remainingTokens: 200000,
+        cacheHitRate: 0,
+        cumulative: { uncachedInput: 0, cacheRead: 0, output: 0, total: 0 },
+      },
+      statusLevel: 'normal',
+    });
+
+    expect(breakdownEl?.textContent).toContain('0.0%');
+    expect(breakdownEl?.querySelector<HTMLElement>('[title="Cache Read"]')?.style.width).toBe('0%');
+    expect(breakdownEl?.querySelector<HTMLElement>('[title="Uncached Input"]')?.style.width).toBe('0%');
+    expect(breakdownEl?.querySelector<HTMLElement>('[title="Output"]')?.style.width).toBe('0%');
+
+    // Empty state hides Module 2
+    await app.sendToolResult({
+      activeConversationId: null,
+      conversations: [],
+      telemetry: null,
+      statusLevel: 'empty',
+    });
+    expect(breakdownEl?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('renders Module 3 Cumulative Usage in compact k-format and toggles visibility on click while preserving state across updates', async () => {
+    const app = await mountBuiltApp();
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    await app.sendToolResult({
+      activeConversationId: 'conv-cum',
+      conversations: [
+        {
+          conversationId: 'conv-cum',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Cumulative Session',
+          lastActiveAt: '2026-11-26T04:00:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 10649,
+        cacheRead: 31339,
+        output: 627,
+        contextUsage: 42615,
+        utilizationPct: 21.3075,
+        remainingTokens: 157385,
+        cacheHitRate: 74.638,
+        cumulative: { uncachedInput: 52410, cacheRead: 98120, output: 850, total: 151380 },
+      },
+      statusLevel: 'normal',
+    });
+
+    const cumulativeEl = doc.getElementById('modCumulative');
+    expect(cumulativeEl).not.toBeNull();
+    expect(cumulativeEl?.classList.contains('hidden')).toBe(false);
+
+    const toggleBtn = doc.getElementById('toggleCumulativeBtn') as HTMLButtonElement | null;
+    const detailsEl = doc.getElementById('cumulativeDetails');
+    expect(toggleBtn).not.toBeNull();
+    expect(detailsEl).not.toBeNull();
+    expect(toggleBtn?.getAttribute('aria-expanded')).toBe('true');
+    expect(detailsEl?.classList.contains('hidden')).toBe(false);
+
+    const text = cumulativeEl?.textContent ?? '';
+    expect(text).toContain('會話累計消耗');
+    expect(text).toContain('151.4k tokens');
+    expect(text).toContain('輸入 52.4k');
+    expect(text).toContain('緩存 98.1k');
+    expect(text).toContain('輸出 850');
+    expect(cumulativeEl?.querySelectorAll('.tabular-nums').length).toBeGreaterThanOrEqual(2);
+
+    // Click toggle button to collapse
+    toggleBtn?.click();
+    expect(toggleBtn?.getAttribute('aria-expanded')).toBe('false');
+    expect(detailsEl?.classList.contains('hidden')).toBe(true);
+
+    // Subsequent snapshot update preserves collapsed state
+    await app.sendToolResult({
+      activeConversationId: 'conv-cum',
+      conversations: [],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 12000,
+        cacheRead: 40000,
+        output: 1000,
+        contextUsage: 53000,
+        utilizationPct: 26.5,
+        remainingTokens: 147000,
+        cacheHitRate: 76.923,
+        cumulative: { uncachedInput: 64410, cacheRead: 138120, output: 1850, total: 204380 },
+      },
+      statusLevel: 'normal',
+    });
+
+    expect(doc.getElementById('toggleCumulativeBtn')?.getAttribute('aria-expanded')).toBe('false');
+    expect(doc.getElementById('cumulativeDetails')?.classList.contains('hidden')).toBe(true);
+
+    // Click toggle button to expand again and verify updated totals
+    (doc.getElementById('toggleCumulativeBtn') as HTMLButtonElement | null)?.click();
+    expect(doc.getElementById('toggleCumulativeBtn')?.getAttribute('aria-expanded')).toBe('true');
+    expect(doc.getElementById('cumulativeDetails')?.classList.contains('hidden')).toBe(false);
+    expect(doc.getElementById('modCumulative')?.textContent).toContain('204.4k tokens');
+
+    // Empty state hides Module 3 completely
+    await app.sendToolResult({
+      activeConversationId: null,
+      conversations: [],
+      telemetry: null,
+      statusLevel: 'empty',
+    });
+    expect(cumulativeEl?.classList.contains('hidden')).toBe(true);
   });
 });

@@ -6,6 +6,7 @@ export interface CumulativeUsage {
   uncachedInput: number;
   cacheRead: number;
   output: number;
+  total: number;
 }
 
 export interface ConversationTelemetry {
@@ -21,6 +22,8 @@ export interface ConversationTelemetry {
   utilizationPct: number | null;
   /** Remaining Context Window capacity in tokens, or null when limit is unknown. */
   remainingTokens: number | null;
+  /** Cache Hit Rate = (uncachedInput + cacheRead) > 0 ? (cacheRead / (uncachedInput + cacheRead)) * 100 : 0 */
+  cacheHitRate: number;
   cumulative: CumulativeUsage;
 }
 

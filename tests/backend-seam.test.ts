@@ -147,10 +147,12 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         contextUsage: 42615,
         utilizationPct: expect.closeTo(21.3075, 4),
         remainingTokens: 157385,
+        cacheHitRate: expect.closeTo(74.638, 3),
         cumulative: {
           uncachedInput: 25649,
           cacheRead: 31339,
           output: 1127,
+          total: 58115,
         },
       });
     } finally {
@@ -219,6 +221,59 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       expect(snapshot.statusLevel).toBe('critical');
       expect(snapshot.telemetry?.contextUsage).toBe(186000);
       expect(snapshot.telemetry?.remainingTokens).toBe(14000);
+    } finally {
+      await close();
+    }
+  });
+
+  it('returns 0% Cache Hit Rate when total input tokens are zero and aggregates Cumulative Usage across invocations', async () => {
+    const zeroInputTranscript = path.join(tmpDir, 'zero-input.jsonl');
+    await fs.writeFile(
+      zeroInputTranscript,
+      [
+        JSON.stringify({
+          step_index: 1,
+          source: 'MODEL',
+          type: 'PLANNER_RESPONSE',
+          model: 'gemini-4-neon-medium',
+          input_tokens: 1000,
+          cache_read_tokens: 3000,
+          output_tokens: 400,
+        }),
+        JSON.stringify({
+          step_index: 2,
+          source: 'MODEL',
+          type: 'PLANNER_RESPONSE',
+          model: 'gemini-4-neon-medium',
+          input_tokens: 0,
+          cache_read_tokens: 0,
+          output_tokens: 250,
+        }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
+    await runHookIndexer(
+      JSON.stringify({
+        conversationId: 'conv-zero-input',
+        modelName: 'gemini-4-neon-medium',
+        transcriptPath: zeroInputTranscript,
+      }),
+      pluginDataDir,
+    );
+
+    const { client, close } = await connectClient(pluginDataDir);
+    try {
+      const res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      const snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+
+      expect(snapshot.telemetry?.cacheHitRate).toBe(0);
+      expect(snapshot.telemetry?.contextUsage).toBe(250);
+      expect(snapshot.telemetry?.cumulative).toEqual({
+        uncachedInput: 1000,
+        cacheRead: 3000,
+        output: 650,
+        total: 4650,
+      });
     } finally {
       await close();
     }
