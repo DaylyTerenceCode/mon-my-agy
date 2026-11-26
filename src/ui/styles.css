@@ -7,6 +7,7 @@
   --mma-border: var(--color-border-primary, #d1d5db);
   --mma-divider: var(--color-border-secondary, #e5e7eb);
   --mma-accent: var(--color-ring-primary, #1d4ed8);
+  --mma-accent-fg: #ffffff;
   --mma-success: var(--color-text-success, #15803d);
   --mma-warning: var(--color-text-warning, #b45309);
   --mma-critical: var(--color-text-danger, #b91c1c);
@@ -26,6 +27,7 @@
   --mma-border: var(--color-border-primary, #323946);
   --mma-divider: var(--color-border-secondary, #282e39);
   --mma-accent: var(--color-ring-primary, #60a5fa);
+  --mma-accent-fg: #0b1220;
   --mma-success: var(--color-text-success, #4ade80);
   --mma-warning: var(--color-text-warning, #fbbf24);
   --mma-critical: var(--color-text-danger, #f87171);
@@ -173,6 +175,142 @@ body {
   width: 14px;
   height: 14px;
   display: block;
+}
+
+.compact-btn {
+  position: relative;
+  overflow: hidden;
+  width: 56px;
+  height: 28px;
+}
+
+.compact-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.compact-btn:disabled:hover {
+  color: var(--mma-muted);
+  border-color: var(--mma-border);
+}
+
+.compact-btn[data-status="normal"]:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mma-success) 62%, var(--mma-border));
+}
+
+.compact-btn[data-status="warning"]:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mma-warning) 62%, var(--mma-border));
+}
+
+.compact-btn[data-status="critical"]:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mma-critical) 62%, var(--mma-border));
+}
+
+.compact-btn:not(:disabled):hover,
+.compact-btn:not(:disabled):focus-visible {
+  color: var(--mma-fg);
+  border-color: var(--mma-accent);
+}
+
+.compact-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  opacity: 0.2;
+  transition: width 0.28s ease, background-color 0.25s ease;
+}
+
+.compact-btn[data-status="normal"] .compact-fill {
+  background: var(--mma-success);
+}
+
+.compact-btn[data-status="warning"] .compact-fill {
+  background: var(--mma-warning);
+}
+
+.compact-btn[data-status="critical"] .compact-fill {
+  background: var(--mma-critical);
+}
+
+.compact-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.confirm-bar {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--mma-divider);
+  background: var(--mma-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.confirm-text {
+  color: var(--mma-fg);
+  min-width: 0;
+}
+
+.confirm-code {
+  font-family: var(--mma-font-mono);
+  font-weight: 600;
+  color: var(--mma-fg);
+}
+
+.confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-secondary,
+.btn-primary {
+  font-family: var(--mma-font-sans);
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-secondary {
+  border: 1px solid var(--mma-border);
+  background: var(--mma-card);
+  color: var(--mma-fg);
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus-visible {
+  border-color: var(--mma-accent);
+}
+
+.btn-primary {
+  border: 1px solid var(--mma-accent);
+  background: var(--mma-accent);
+  color: var(--mma-accent-fg);
+  font-weight: 500;
+}
+
+.btn-secondary:focus-visible,
+.btn-primary:focus-visible {
+  outline: 2px solid var(--mma-accent);
+  outline-offset: 1px;
+}
+
+.toast {
+  padding: 8px 14px;
+  border-top: 1px solid var(--mma-divider);
+  background: var(--mma-surface);
+  color: var(--mma-fg);
+  font-size: 12px;
+  text-align: center;
 }
 
 .conv-bar {

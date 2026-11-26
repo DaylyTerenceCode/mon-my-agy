@@ -15,6 +15,7 @@ import {
 const EMPTY_GUIDANCE =
   '尚無已記錄的對話數據。完成一次對話回覆後將自動顯示 Context Usage。';
 const POLL_INTERVAL_MS = 3000;
+const TOAST_DURATION_MS = 2200;
 
 function formatFull(n: number): string {
   return Math.max(0, Math.floor(n)).toLocaleString('en-US');
@@ -30,6 +31,11 @@ let selectedConversationId: string | undefined;
 let isFetching = false;
 let pendingRequest: { conversationId?: string } | null = null;
 let pollTimerId: number | null = null;
+let toastTimerId: number | null = null;
+let confirmingCompact = false;
+let hasActiveTelemetry = false;
+let hostSupportsMessage = false;
+let isSendingCompact = false;
 let appInstance: App | null = null;
 
 function renderConversationSwitcher(
@@ -146,6 +152,91 @@ function renderCumulative(
   syncCumulativeVisibility();
 }
 
+function setConfirmBarOpen(open: boolean): void {
+  confirmingCompact = open;
+  const confirmBar = document.getElementById('confirmBar');
+  const compactBtn = document.getElementById('compactBtn');
+  if (confirmBar) {
+    confirmBar.classList.toggle('hidden', !open);
+  }
+  if (compactBtn) {
+    compactBtn.setAttribute('aria-expanded', String(open));
+  }
+}
+
+function clearToastTimer(): void {
+  if (toastTimerId !== null) {
+    window.clearTimeout(toastTimerId);
+    toastTimerId = null;
+  }
+}
+
+function showToast(message: string): void {
+  const toastEl = document.getElementById('toast');
+  if (!toastEl) return;
+  toastEl.textContent = message;
+  toastEl.classList.remove('hidden');
+  clearToastTimer();
+  toastTimerId = window.setTimeout(() => {
+    toastEl.classList.add('hidden');
+    toastTimerId = null;
+  }, TOAST_DURATION_MS);
+}
+
+async function handleConfirmCompact(): Promise<void> {
+  setConfirmBarOpen(false);
+  if (!hostSupportsMessage || !appInstance || isSendingCompact) return;
+
+  isSendingCompact = true;
+  try {
+    const result = await appInstance.sendMessage({
+      role: 'user',
+      content: [{ type: 'text', text: '/compact' }],
+    });
+    if (result?.isError) {
+      showToast('發送 /compact 失敗');
+    } else {
+      showToast('已發送 /compact 壓縮指令');
+    }
+  } catch (err) {
+    console.error('[mon-my-agy] Failed to send /compact message:', err);
+    showToast('發送 /compact 失敗');
+  } finally {
+    isSendingCompact = false;
+  }
+}
+
+function syncCompactAvailability(): void {
+  const compactBtn = document.getElementById('compactBtn') as HTMLButtonElement | null;
+  if (compactBtn) {
+    compactBtn.classList.toggle('hidden', !hostSupportsMessage);
+    compactBtn.disabled = !hostSupportsMessage || !hasActiveTelemetry;
+  }
+  if (!hostSupportsMessage || !hasActiveTelemetry) {
+    setConfirmBarOpen(false);
+  }
+}
+
+function applyMessageCapability(supported: boolean): void {
+  hostSupportsMessage = supported;
+  syncCompactAvailability();
+}
+
+function syncCompactButton(
+  status: StatusLevel,
+  fillPct: number,
+  activeTelemetry: boolean,
+): void {
+  hasActiveTelemetry = activeTelemetry;
+  const compactBtn = document.getElementById('compactBtn') as HTMLButtonElement | null;
+  const compactFill = document.getElementById('compactFill') as HTMLElement | null;
+  if (compactBtn && compactFill) {
+    compactBtn.setAttribute('data-status', status);
+    compactFill.style.width = `${fillPct}%`;
+  }
+  syncCompactAvailability();
+}
+
 function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
   const dotEl = document.getElementById('headerDot');
   const modelEl = document.getElementById('modelBadge');
@@ -175,6 +266,7 @@ function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
     dotEl.setAttribute('data-status', 'empty');
     modelEl.textContent = 'waiting';
     modelEl.setAttribute('title', 'waiting');
+    syncCompactButton('empty', 0, false);
     primaryEl.innerHTML = `<div class="empty-state">${EMPTY_GUIDANCE}</div>`;
     breakdownEl.classList.add('hidden');
     breakdownEl.innerHTML = '';
@@ -195,6 +287,7 @@ function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
   dotEl.setAttribute('data-status', status);
   modelEl.textContent = t.model;
   modelEl.setAttribute('title', t.model);
+  syncCompactButton(status, hasLimit ? barWidth : 0, true);
 
   const usageSummary = hasLimit
     ? `${formatFull(t.contextUsage)} / ${formatFull(t.limit!)} (${pct!.toFixed(1)}%)`
@@ -310,6 +403,28 @@ async function bootstrap(): Promise<void> {
     });
   }
 
+  const compactBtn = document.getElementById('compactBtn') as HTMLButtonElement | null;
+  if (compactBtn) {
+    compactBtn.addEventListener('click', () => {
+      if (!hostSupportsMessage || compactBtn.disabled || !hasActiveTelemetry) return;
+      setConfirmBarOpen(!confirmingCompact);
+    });
+  }
+
+  const cancelCompactBtn = document.getElementById('cancelCompactBtn');
+  if (cancelCompactBtn) {
+    cancelCompactBtn.addEventListener('click', () => {
+      setConfirmBarOpen(false);
+    });
+  }
+
+  const confirmCompactBtn = document.getElementById('confirmCompactBtn');
+  if (confirmCompactBtn) {
+    confirmCompactBtn.addEventListener('click', () => {
+      void handleConfirmCompact();
+    });
+  }
+
   const refreshBtn = document.getElementById('refreshBtn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
@@ -320,6 +435,7 @@ async function bootstrap(): Promise<void> {
   const convSelect = document.getElementById('convSelect') as HTMLSelectElement | null;
   if (convSelect) {
     convSelect.addEventListener('change', () => {
+      setConfirmBarOpen(false);
       selectedConversationId = convSelect.value || undefined;
       void requestSnapshot(selectedConversationId, true);
     });
@@ -340,9 +456,13 @@ async function bootstrap(): Promise<void> {
   try {
     await app.connect();
     applyHostContext(app.getHostContext());
+    applyMessageCapability(Boolean(app.getHostCapabilities()?.message));
 
     document.addEventListener('visibilitychange', syncPollingState);
-    window.addEventListener('pagehide', stopPolling);
+    window.addEventListener('pagehide', () => {
+      stopPolling();
+      clearToastTimer();
+    });
     syncPollingState();
   } catch (err) {
     console.error('[mon-my-agy] Failed to connect MCP App:', err);

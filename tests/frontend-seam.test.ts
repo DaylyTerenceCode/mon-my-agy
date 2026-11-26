@@ -13,8 +13,14 @@ interface ToolCallRecord {
   arguments?: Record<string, unknown>;
 }
 
+interface SentMessageRecord {
+  role?: string;
+  content?: Array<{ type?: string; text?: string }>;
+}
+
 interface MountOptions {
   initialHidden?: boolean;
+  hostCapabilities?: Record<string, unknown>;
   onToolCall?: (
     call: ToolCallRecord,
   ) => TelemetrySnapshot | Promise<TelemetrySnapshot>;
@@ -23,6 +29,7 @@ interface MountOptions {
 interface MountedApp {
   dom: JSDOM;
   toolCalls: ToolCallRecord[];
+  sentMessages: SentMessageRecord[];
   sendToolResult: (snapshot: TelemetrySnapshot) => Promise<void>;
   setHidden: (hidden: boolean) => void;
   advanceIntervals: () => Promise<void>;
@@ -39,6 +46,7 @@ async function mountBuiltApp(options: MountOptions = {}): Promise<MountedApp> {
   });
 
   const toolCalls: ToolCallRecord[] = [];
+  const sentMessages: SentMessageRecord[] = [];
   let hiddenState = options.initialHidden ?? false;
   let nextIntervalId = 1;
   const activeIntervals = new Map<number, () => void>();
@@ -104,7 +112,7 @@ async function mountBuiltApp(options: MountOptions = {}): Promise<MountedApp> {
                     result: {
                       protocolVersion,
                       hostInfo: { name: 'antigravity-test-host', version: '1.0.0' },
-                      hostCapabilities: {
+                      hostCapabilities: options.hostCapabilities ?? {
                         serverTools: {},
                         message: {},
                       },
@@ -163,6 +171,27 @@ async function mountBuiltApp(options: MountOptions = {}): Promise<MountedApp> {
                 }),
               );
             }
+          } else if (msg.method === 'ui/message' && msg.id !== undefined) {
+            const record: SentMessageRecord = {
+              role: typeof msg.params?.role === 'string' ? msg.params.role : undefined,
+              content: Array.isArray(msg.params?.content)
+                ? (msg.params.content as Array<{ type?: string; text?: string }>)
+                : undefined,
+            };
+            sentMessages.push(record);
+            const requestId = msg.id;
+            queueMicrotask(() => {
+              win.dispatchEvent(
+                new win.MessageEvent('message', {
+                  data: {
+                    jsonrpc: '2.0',
+                    id: requestId,
+                    result: {},
+                  },
+                  source: hostParent as unknown as Window,
+                }),
+              );
+            });
           }
         },
       };
@@ -181,6 +210,7 @@ async function mountBuiltApp(options: MountOptions = {}): Promise<MountedApp> {
   return {
     dom,
     toolCalls,
+    sentMessages,
     async sendToolResult(snapshot: TelemetrySnapshot) {
       const win = dom.window;
       win.dispatchEvent(
@@ -826,5 +856,270 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     expect(app.activeIntervalCount()).toBe(1);
     await app.advanceIntervals();
     expect(app.toolCalls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('renders 56x28px liquid-fill /compact icon button synced with Context Usage percentage and status level', async () => {
+    const html = await fs.readFile(builtHtmlPath, 'utf8');
+    expect(html).toContain('width: 56px');
+    expect(html).toContain('height: 28px');
+    expect(html).toContain('color: var(--mma-muted)');
+    expect(html).toContain('color: var(--mma-fg)');
+    expect(html).toContain('.compact-btn[data-status="normal"] .compact-fill');
+    expect(html).toContain('.compact-btn[data-status="warning"] .compact-fill');
+    expect(html).toContain('.compact-btn[data-status="critical"] .compact-fill');
+
+    const app = await mountBuiltApp();
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    const compactBtn = doc.getElementById('compactBtn') as HTMLButtonElement | null;
+    const compactFill = doc.getElementById('compactFill') as HTMLElement | null;
+    expect(compactBtn).not.toBeNull();
+    expect(compactFill).not.toBeNull();
+    expect(compactBtn?.getAttribute('title')).toBe('Compact');
+    expect(compactBtn?.getAttribute('aria-label')).toBe('Compact');
+    expect(compactBtn?.textContent?.trim()).toBe('');
+    expect(compactBtn?.textContent).not.toContain('/compact');
+    expect(compactBtn?.querySelector('svg')).not.toBeNull();
+
+    // 1. Empty state -> 0% fill, disabled
+    await app.sendToolResult({
+      activeConversationId: null,
+      conversations: [],
+      telemetry: null,
+      statusLevel: 'empty',
+    });
+    expect(compactFill?.style.width).toBe('0%');
+    expect(compactBtn?.getAttribute('data-status')).toBe('empty');
+    expect(compactBtn?.disabled).toBe(true);
+
+    // 2. Normal state (21.3%) -> synced fill width & normal status
+    await app.sendToolResult({
+      activeConversationId: 'conv-compact-1',
+      conversations: [
+        {
+          conversationId: 'conv-compact-1',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Compact Session',
+          lastActiveAt: '2026-11-26T06:00:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 10649,
+        cacheRead: 31339,
+        output: 627,
+        contextUsage: 42615,
+        utilizationPct: 21.3075,
+        remainingTokens: 157385,
+        cacheHitRate: 74.638,
+        cumulative: { uncachedInput: 52410, cacheRead: 98120, output: 4820, total: 155350 },
+      },
+      statusLevel: 'normal',
+    });
+    expect(compactBtn?.disabled).toBe(false);
+    expect(compactBtn?.getAttribute('data-status')).toBe('normal');
+    expect(parseFloat(compactFill?.style.width ?? '0')).toBeCloseTo(21.3, 1);
+
+    // 3. Critical state (93.0%) -> synced fill width & critical status
+    await app.sendToolResult({
+      activeConversationId: 'conv-compact-1',
+      conversations: [
+        {
+          conversationId: 'conv-compact-1',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Compact Session',
+          lastActiveAt: '2026-11-26T06:05:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 18500,
+        cacheRead: 164200,
+        output: 3300,
+        contextUsage: 186000,
+        utilizationPct: 93.0,
+        remainingTokens: 14000,
+        cacheHitRate: 89.874,
+        cumulative: { uncachedInput: 215000, cacheRead: 842000, output: 28600, total: 1085600 },
+      },
+      statusLevel: 'critical',
+    });
+    expect(compactBtn?.getAttribute('data-status')).toBe('critical');
+    expect(parseFloat(compactFill?.style.width ?? '0')).toBeCloseTo(93.0, 1);
+
+    // 4. Unknown model (limit: null) -> 0% fill, button still enabled for active conversation
+    await app.sendToolResult({
+      activeConversationId: 'conv-compact-unknown',
+      conversations: [
+        {
+          conversationId: 'conv-compact-unknown',
+          modelName: 'gemini-next-exp-05',
+          title: 'Unknown Model Session',
+          lastActiveAt: '2026-11-26T06:10:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-next-exp-05',
+        limit: null,
+        uncachedInput: 14200,
+        cacheRead: 48600,
+        output: 1120,
+        contextUsage: 63920,
+        utilizationPct: null,
+        remainingTokens: null,
+        cacheHitRate: 77.3885,
+        cumulative: { uncachedInput: 68400, cacheRead: 145000, output: 7210, total: 220610 },
+      },
+      statusLevel: 'unknown',
+    });
+    expect(compactBtn?.disabled).toBe(false);
+    expect(compactBtn?.getAttribute('data-status')).toBe('unknown');
+    expect(compactFill?.style.width).toBe('0%');
+  });
+
+  it('toggles two-step inline confirmation, collapses on cancel or conversation switch without sending, and sends /compact with toast on confirm', async () => {
+    const conversations = [
+      {
+        conversationId: 'conv-a',
+        modelName: 'gemini-4-neon-medium',
+        title: 'Session A',
+        lastActiveAt: '2026-11-26T06:00:00Z',
+      },
+      {
+        conversationId: 'conv-b',
+        modelName: 'gemini-4-neon-medium',
+        title: 'Session B',
+        lastActiveAt: '2026-11-26T05:00:00Z',
+      },
+    ];
+
+    const snapshotA: TelemetrySnapshot = {
+      activeConversationId: 'conv-a',
+      conversations,
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 30000,
+        cacheRead: 130000,
+        output: 4000,
+        contextUsage: 164000,
+        utilizationPct: 82.0,
+        remainingTokens: 36000,
+        cacheHitRate: 81.25,
+        cumulative: { uncachedInput: 30000, cacheRead: 130000, output: 4000, total: 164000 },
+      },
+      statusLevel: 'warning',
+    };
+
+    const app = await mountBuiltApp({
+      onToolCall: () => ({ ...snapshotA, activeConversationId: 'conv-b' }),
+    });
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    await app.sendToolResult(snapshotA);
+
+    const compactBtn = doc.getElementById('compactBtn') as HTMLButtonElement | null;
+    const confirmBar = doc.getElementById('confirmBar') as HTMLElement | null;
+    const cancelBtn = doc.getElementById('cancelCompactBtn') as HTMLButtonElement | null;
+    const confirmBtn = doc.getElementById('confirmCompactBtn') as HTMLButtonElement | null;
+    const toastEl = doc.getElementById('toast') as HTMLElement | null;
+    const convSelect = doc.getElementById('convSelect') as HTMLSelectElement | null;
+
+    expect(confirmBar).not.toBeNull();
+    expect(confirmBar?.classList.contains('hidden')).toBe(true);
+    expect(cancelBtn).not.toBeNull();
+    expect(confirmBtn).not.toBeNull();
+    expect(toastEl?.classList.contains('hidden')).toBe(true);
+
+    // 1. Clicking /compact toggles inline confirmation bar open and closed
+    compactBtn?.click();
+    expect(confirmBar?.classList.contains('hidden')).toBe(false);
+    expect(app.sentMessages).toHaveLength(0);
+    compactBtn?.click();
+    expect(confirmBar?.classList.contains('hidden')).toBe(true);
+    expect(app.sentMessages).toHaveLength(0);
+
+    // 2. Re-open and click Cancel -> collapses bar and sends nothing
+    compactBtn?.click();
+    expect(confirmBar?.classList.contains('hidden')).toBe(false);
+    cancelBtn?.click();
+    expect(confirmBar?.classList.contains('hidden')).toBe(true);
+    expect(app.sentMessages).toHaveLength(0);
+
+    // 3. Re-open confirmation bar, then switch conversation -> auto-collapses and sends nothing
+    compactBtn?.click();
+    expect(confirmBar?.classList.contains('hidden')).toBe(false);
+    convSelect!.value = 'conv-b';
+    convSelect!.dispatchEvent(new app.dom.window.Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(confirmBar?.classList.contains('hidden')).toBe(true);
+    expect(app.sentMessages).toHaveLength(0);
+
+    // 4. Re-open confirmation bar and click Confirm -> sends ui/message "/compact", collapses bar, shows toast
+    compactBtn?.click();
+    expect(confirmBar?.classList.contains('hidden')).toBe(false);
+    confirmBtn?.click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(confirmBar?.classList.contains('hidden')).toBe(true);
+    expect(app.sentMessages).toEqual([
+      {
+        role: 'user',
+        content: [{ type: 'text', text: '/compact' }],
+      },
+    ]);
+    expect(toastEl?.classList.contains('hidden')).toBe(false);
+    expect(toastEl?.textContent).toContain('/compact');
+  });
+
+  it('hides and disables /compact entry when host lacks message capability', async () => {
+    const app = await mountBuiltApp({
+      hostCapabilities: {
+        serverTools: {},
+      },
+    });
+    openApps.push(app);
+    const doc = app.dom.window.document;
+
+    await app.sendToolResult({
+      activeConversationId: 'conv-no-msg',
+      conversations: [
+        {
+          conversationId: 'conv-no-msg',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Global View Session',
+          lastActiveAt: '2026-11-26T06:00:00Z',
+        },
+      ],
+      telemetry: {
+        model: 'gemini-4-neon-medium',
+        limit: 200000,
+        uncachedInput: 40000,
+        cacheRead: 130000,
+        output: 4000,
+        contextUsage: 174000,
+        utilizationPct: 87.0,
+        remainingTokens: 26000,
+        cacheHitRate: 76.47,
+        cumulative: { uncachedInput: 40000, cacheRead: 130000, output: 4000, total: 174000 },
+      },
+      statusLevel: 'critical',
+    });
+
+    const compactBtn = doc.getElementById('compactBtn') as HTMLButtonElement | null;
+    const confirmBar = doc.getElementById('confirmBar') as HTMLElement | null;
+
+    expect(compactBtn).not.toBeNull();
+    expect(compactBtn?.classList.contains('hidden')).toBe(true);
+    expect(compactBtn?.disabled).toBe(true);
+
+    // Even if programmatically clicked, confirmation bar stays hidden and no message is sent
+    compactBtn?.click();
+    expect(confirmBar?.classList.contains('hidden')).toBe(true);
+    expect(app.sentMessages).toHaveLength(0);
   });
 });

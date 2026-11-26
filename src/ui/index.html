@@ -16,6 +16,24 @@
       </div>
       <div class="header-actions">
         <button
+          id="compactBtn"
+          class="icon-btn compact-btn hidden"
+          type="button"
+          aria-label="Compact"
+          title="Compact"
+          aria-expanded="false"
+          aria-controls="confirmBar"
+          data-status="empty"
+          disabled
+        >
+          <span id="compactFill" class="compact-fill" style="width: 0%;"></span>
+          <svg class="icon-svg compact-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 1.75v4.5M5.5 4.25L8 6.25l2.5-2" />
+            <path d="M2.5 8h11" />
+            <path d="M8 14.25v-4.5M5.5 11.75L8 9.75l2.5 2" />
+          </svg>
+        </button>
+        <button
           id="refreshBtn"
           class="icon-btn"
           type="button"
@@ -29,6 +47,14 @@
         </button>
       </div>
     </header>
+
+    <div id="confirmBar" class="confirm-bar hidden" role="region" aria-label="確認壓縮上下文">
+      <span class="confirm-text">確認發送 <code class="confirm-code">/compact</code> 壓縮上下文？</span>
+      <div class="confirm-actions">
+        <button id="cancelCompactBtn" class="btn-secondary" type="button">取消</button>
+        <button id="confirmCompactBtn" class="btn-primary" type="button">確認</button>
+      </div>
+    </div>
 
     <div id="convBar" class="conv-bar hidden">
       <select id="convSelect" class="conv-select" aria-label="切換對話"></select>
@@ -58,6 +84,8 @@
         <div id="cumulativeDetails" class="cumulative-breakdown tabular-nums"></div>
       </section>
     </div>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   </main>
 
   <!-- INLINE_SCRIPT -->
