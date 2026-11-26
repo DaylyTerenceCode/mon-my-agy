@@ -186,6 +186,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-warn',
         modelName: 'gemini-4-neon-medium',
         transcriptPath: warningTranscript,
+        lastUserInput: 'Check warning state',
       }),
       pluginDataDir,
     );
@@ -217,6 +218,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
           conversationId: 'conv-crit',
           modelName: 'gemini-4-neon-medium',
           transcriptPath: criticalTranscript,
+          lastUserInput: 'Check critical state',
         }),
         pluginDataDir,
       );
@@ -263,6 +265,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-zero-input',
         modelName: 'gemini-4-neon-medium',
         transcriptPath: zeroInputTranscript,
+        lastUserInput: 'Check zero input boundary',
       }),
       pluginDataDir,
     );
@@ -302,6 +305,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-1',
         modelName: 'gemini-4-neon-medium',
         transcriptPath: path.join(tmpDir, 't.jsonl'),
+        lastUserInput: 'Write fail test',
       }),
       blockingFile,
     );
@@ -333,6 +337,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-corrupt',
         modelName: 'gemini-4-neon-medium',
         transcriptPath: corruptTranscript,
+        lastUserInput: 'Check corrupt transcript',
       }),
       pluginDataDir,
     );
@@ -352,6 +357,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
           conversationId: 'conv-empty',
           modelName: 'gemini-4-neon-medium',
           transcriptPath: emptyTranscript,
+          lastUserInput: 'Check empty transcript',
         }),
         pluginDataDir,
       );
@@ -366,6 +372,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
           conversationId: 'conv-missing',
           modelName: 'gemini-4-neon-medium',
           transcriptPath: path.join(tmpDir, 'does-not-exist.jsonl'),
+          lastUserInput: 'Check missing transcript',
         }),
         pluginDataDir,
       );
@@ -400,6 +407,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-cli-1',
         modelName: 'claude-sonnet-4-20250514',
         transcriptPath,
+        lastUserInput: 'Run CLI hook',
         hookEventName: 'Stop',
       }),
       env: { ...process.env, PLUGIN_DATA: pluginDataDir },
@@ -441,6 +449,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-unknown-1',
         modelName: 'gemini-next-exp-05',
         transcriptPath: unknownTranscript,
+        lastUserInput: 'Check unknown model',
       }),
       pluginDataDir,
     );
@@ -496,6 +505,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-exact-override',
         modelName: 'gemini-4-neon-medium',
         transcriptPath: exactOverrideTranscript,
+        lastUserInput: 'Check exact override',
       }),
       pluginDataDir,
     );
@@ -527,6 +537,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
           conversationId: 'conv-prefix-override',
           modelName: 'Custom-LLM-Pro-2026',
           transcriptPath: prefixTranscript,
+          lastUserInput: 'Check prefix override',
         }),
         pluginDataDir,
       );
@@ -560,6 +571,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-fallback',
         modelName: 'gemini-4-neon-medium',
         transcriptPath: transcript,
+        lastUserInput: 'Check fallback config',
       }),
       pluginDataDir,
     );
@@ -606,7 +618,12 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         'utf8',
       );
       await runHookIndexer(
-        JSON.stringify({ conversationId: 'conv-float', modelName: 'float-model', transcriptPath: floatTranscript }),
+        JSON.stringify({
+          conversationId: 'conv-float',
+          modelName: 'float-model',
+          transcriptPath: floatTranscript,
+          lastUserInput: 'Check float limit',
+        }),
         pluginDataDir,
       );
       res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
@@ -621,7 +638,12 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         'utf8',
       );
       await runHookIndexer(
-        JSON.stringify({ conversationId: 'conv-valid', modelName: 'valid-custom', transcriptPath: validTranscript }),
+        JSON.stringify({
+          conversationId: 'conv-valid',
+          modelName: 'valid-custom',
+          transcriptPath: validTranscript,
+          lastUserInput: 'Check valid custom limit',
+        }),
         pluginDataDir,
       );
       res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
@@ -776,6 +798,7 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
         conversationId: 'conv-palette',
         modelName: 'custom-palette-model',
         transcriptPath,
+        lastUserInput: 'Check custom color palette',
       }),
       pluginDataDir,
     );
@@ -875,6 +898,69 @@ describe('Backend Seam: Hook -> PLUGIN_DATA -> MCP Server', () => {
       const sanitizedSnapshot = sanitizedRes.structuredContent as unknown as TelemetrySnapshot;
       expect(sanitizedSnapshot.customColors).toEqual({ success: '#123456' });
       expect(sanitizedSnapshot.telemetry?.limit).toBe(100000);
+    } finally {
+      await close();
+    }
+  });
+
+  it('ignores non-interactive subagent hook payloads without lastUserInput so they do not hijack active user conversation', async () => {
+    const userTranscript = path.join(tmpDir, 'user-session.jsonl');
+    const subagentTranscript = path.join(tmpDir, 'subagent-session.jsonl');
+    await fs.writeFile(
+      userTranscript,
+      JSON.stringify({
+        step_index: 1,
+        model: 'gemini-4-neon-medium',
+        input_tokens: 20000,
+        cache_read_tokens: 40000,
+        output_tokens: 1000,
+      }) + '\n',
+      'utf8',
+    );
+    await fs.writeFile(
+      subagentTranscript,
+      JSON.stringify({
+        step_index: 1,
+        model: 'gemini-4-neon-medium',
+        input_tokens: 500,
+        cache_read_tokens: 0,
+        output_tokens: 100,
+      }) + '\n',
+      'utf8',
+    );
+
+    await runHookIndexer(
+      JSON.stringify({
+        conversationId: 'conv-user-main',
+        modelName: 'gemini-4-neon-medium',
+        transcriptPath: userTranscript,
+        lastUserInput: 'Main user prompt',
+        hookEventName: 'PostInvocation',
+      }),
+      pluginDataDir,
+    );
+
+    // Background subagent fires without lastUserInput (or whitespace only)
+    const subagentRes = await runHookIndexer(
+      JSON.stringify({
+        conversationId: 'cb1eae17-d70f-4874-a094-c306ba5df5df',
+        modelName: 'gemini-4-neon-medium',
+        transcriptPath: subagentTranscript,
+        lastUserInput: '   ',
+        hookEventName: 'Stop',
+      }),
+      pluginDataDir,
+    );
+    expect(subagentRes.exitCode).toBe(0);
+    expect(subagentRes.stdout).toBe('{}');
+
+    const { client, close } = await connectClient(pluginDataDir);
+    try {
+      const res = await client.callTool({ name: ENTRYPOINT_TOOL_NAME, arguments: {} });
+      const snapshot = res.structuredContent as unknown as TelemetrySnapshot;
+      expect(snapshot.activeConversationId).toBe('conv-user-main');
+      expect(snapshot.conversations.map((c) => c.conversationId)).toEqual(['conv-user-main']);
+      expect(snapshot.telemetry?.contextUsage).toBe(61000);
     } finally {
       await close();
     }

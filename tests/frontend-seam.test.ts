@@ -676,72 +676,31 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     expect(doc.getElementById('modBreakdown')?.textContent).toContain('80.0%');
   });
 
-  it('hides conversation switcher in empty state and switches conversation via app-only query tool', async () => {
-    const conversations = [
-      {
-        conversationId: 'conv-latest',
-        modelName: 'gemini-4-neon-medium',
-        title: 'Latest Coding Session',
-        lastActiveAt: '2026-11-26T06:00:00Z',
-      },
-      {
-        conversationId: 'conv-prev',
-        modelName: 'claude-sonnet-4-20250514',
-        title: 'Previous Review Session',
-        lastActiveAt: '2026-11-26T05:00:00Z',
-      },
-    ];
-
-    const prevSnapshot: TelemetrySnapshot = {
-      activeConversationId: 'conv-prev',
-      conversations,
-      telemetry: {
-        model: 'claude-sonnet-4-20250514',
-        limit: 200000,
-        uncachedInput: 30000,
-        cacheRead: 120000,
-        output: 6000,
-        contextUsage: 156000,
-        utilizationPct: 78.0,
-        remainingTokens: 44000,
-        cacheHitRate: 80.0,
-        cumulative: { uncachedInput: 50000, cacheRead: 200000, output: 10000, total: 260000 },
-      },
-      statusLevel: 'warning',
-    };
-
-    const app = await mountBuiltApp({
-      onToolCall: (call) => {
-        if (call.arguments?.conversationId === 'conv-prev') {
-          return prevSnapshot;
-        }
-        return {
-          activeConversationId: 'conv-latest',
-          conversations,
-          telemetry: null,
-          statusLevel: 'empty',
-        };
-      },
-    });
+  it('omits conversation switcher dropdown and automatically reflects the latest active conversation snapshot', async () => {
+    const app = await mountBuiltApp();
     openApps.push(app);
     const doc = app.dom.window.document;
 
-    // 1. Empty state hides conversation switcher
-    await app.sendToolResult({
-      activeConversationId: null,
-      conversations: [],
-      telemetry: null,
-      statusLevel: 'empty',
-    });
-    const convBar = doc.getElementById('convBar');
-    const convSelect = doc.getElementById('convSelect') as HTMLSelectElement | null;
-    expect(convBar?.classList.contains('hidden')).toBe(true);
-    expect(convSelect).not.toBeNull();
+    expect(doc.getElementById('convBar')).toBeNull();
+    expect(doc.getElementById('convSelect')).toBeNull();
+    expect(doc.querySelector('select')).toBeNull();
 
-    // 2. Populated state reveals switcher with options in server order
     await app.sendToolResult({
       activeConversationId: 'conv-latest',
-      conversations,
+      conversations: [
+        {
+          conversationId: 'conv-latest',
+          modelName: 'gemini-4-neon-medium',
+          title: 'Latest Coding Session',
+          lastActiveAt: '2026-11-26T06:00:00Z',
+        },
+        {
+          conversationId: 'conv-prev',
+          modelName: 'claude-sonnet-4-20250514',
+          title: 'Previous Review Session',
+          lastActiveAt: '2026-11-26T05:00:00Z',
+        },
+      ],
       telemetry: {
         model: 'gemini-4-neon-medium',
         limit: 200000,
@@ -757,25 +716,10 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
       statusLevel: 'normal',
     });
 
-    expect(convBar?.classList.contains('hidden')).toBe(false);
-    expect(Array.from(convSelect!.options).map((o) => ({ value: o.value, text: o.textContent }))).toEqual([
-      { value: 'conv-latest', text: 'Latest Coding Session' },
-      { value: 'conv-prev', text: 'Previous Review Session' },
-    ]);
-    expect(convSelect!.value).toBe('conv-latest');
-
-    // 3. Changing dropdown triggers callServerTool with selected conversationId and updates all modules
-    convSelect!.value = 'conv-prev';
-    convSelect!.dispatchEvent(new app.dom.window.Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 20));
-
-    expect(app.toolCalls).toEqual([
-      { name: APP_QUERY_TOOL_NAME, arguments: { conversationId: 'conv-prev' } },
-    ]);
-    expect(doc.getElementById('headerDot')?.getAttribute('data-status')).toBe('warning');
-    expect(doc.getElementById('modelBadge')?.textContent?.trim()).toBe('claude-sonnet-4-20250514');
-    expect(doc.getElementById('modPrimary')?.textContent).toContain('156,000 / 200,000 (78.0%)');
-    expect(doc.getElementById('modCumulative')?.textContent).toContain('260.0k tokens');
+    expect(doc.querySelector('select')).toBeNull();
+    expect(doc.getElementById('headerDot')?.getAttribute('data-status')).toBe('normal');
+    expect(doc.getElementById('modelBadge')?.textContent?.trim()).toBe('gemini-4-neon-medium');
+    expect(doc.getElementById('modPrimary')?.textContent).toContain('41,000 / 200,000 (20.5%)');
   });
 
   it('polls only while page is visible and enforces single-in-flight request constraint', async () => {
@@ -1047,7 +991,6 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     const cancelBtn = doc.getElementById('cancelCompactBtn') as HTMLButtonElement | null;
     const confirmBtn = doc.getElementById('confirmCompactBtn') as HTMLButtonElement | null;
     const toastEl = doc.getElementById('toast') as HTMLElement | null;
-    const convSelect = doc.getElementById('convSelect') as HTMLSelectElement | null;
 
     expect(confirmBar).not.toBeNull();
     expect(confirmBar?.classList.contains('hidden')).toBe(true);
@@ -1070,12 +1013,10 @@ describe('Frontend Seam: Single-File MCP App HTML <-> postMessage Host Bridge', 
     expect(confirmBar?.classList.contains('hidden')).toBe(true);
     expect(app.sentMessages).toHaveLength(0);
 
-    // 3. Re-open confirmation bar, then switch conversation -> auto-collapses and sends nothing
+    // 3. Re-open confirmation bar, then active conversation changes -> auto-collapses and sends nothing
     compactBtn?.click();
     expect(confirmBar?.classList.contains('hidden')).toBe(false);
-    convSelect!.value = 'conv-b';
-    convSelect!.dispatchEvent(new app.dom.window.Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 20));
+    await app.sendToolResult({ ...snapshotA, activeConversationId: 'conv-b' });
     expect(confirmBar?.classList.contains('hidden')).toBe(true);
     expect(app.sentMessages).toHaveLength(0);
 

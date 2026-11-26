@@ -10,7 +10,6 @@ import {
   CUSTOM_COLOR_KEYS,
   normalizeHexColor,
   sanitizeCustomColorPalette,
-  type ConversationSummary,
   type ConversationTelemetry,
   type CustomColorKey,
   type CustomColorPalette,
@@ -68,9 +67,9 @@ function formatCompact(n: number): string {
 }
 
 let showCumulative = true;
-let selectedConversationId: string | undefined;
+let lastActiveConversationId: string | null = null;
 let isFetching = false;
-let pendingRequest: { conversationId?: string } | null = null;
+let hasPendingRefresh = false;
 let pollTimerId: number | null = null;
 let toastTimerId: number | null = null;
 let confirmingCompact = false;
@@ -82,39 +81,6 @@ let hasActiveTelemetry = false;
 let hostSupportsMessage = false;
 let isSendingCompact = false;
 let appInstance: App | null = null;
-
-function renderConversationSwitcher(
-  conversations: ConversationSummary[],
-  activeConversationId: string | null,
-): void {
-  const convBar = document.getElementById('convBar');
-  const convSelect = document.getElementById('convSelect') as HTMLSelectElement | null;
-  if (!convBar || !convSelect) return;
-
-  if (conversations.length === 0) {
-    convBar.classList.add('hidden');
-    convSelect.innerHTML = '';
-    return;
-  }
-
-  convBar.classList.remove('hidden');
-  convSelect.innerHTML = '';
-  for (const conv of conversations) {
-    const opt = document.createElement('option');
-    opt.value = conv.conversationId;
-    opt.textContent = conv.title || conv.conversationId;
-    convSelect.appendChild(opt);
-  }
-
-  if (
-    activeConversationId &&
-    conversations.some((c) => c.conversationId === activeConversationId)
-  ) {
-    convSelect.value = activeConversationId;
-  } else {
-    convSelect.value = conversations[0]!.conversationId;
-  }
-}
 
 function syncCumulativeVisibility(): void {
   const toggleBtn = document.getElementById('toggleCumulativeBtn');
@@ -426,10 +392,13 @@ function renderSnapshot(snapshot: TelemetrySnapshot | null): void {
 
   hydrateCustomColors(snapshot?.customColors);
 
-  renderConversationSwitcher(
-    snapshot?.conversations ?? [],
-    snapshot?.activeConversationId ?? null,
-  );
+  const nextConversationId = snapshot?.activeConversationId ?? null;
+  if (nextConversationId !== lastActiveConversationId) {
+    lastActiveConversationId = nextConversationId;
+    if (confirmingCompact) {
+      setConfirmBarOpen(false);
+    }
+  }
 
   if (!snapshot || !snapshot.telemetry || snapshot.statusLevel === 'empty') {
     dotEl.setAttribute('data-status', 'empty');
@@ -498,14 +467,11 @@ function extractSnapshot(structuredContent: unknown): TelemetrySnapshot | null {
   return candidate as TelemetrySnapshot;
 }
 
-async function requestSnapshot(
-  conversationId?: string,
-  queueIfBusy = false,
-): Promise<void> {
+async function requestSnapshot(queueIfBusy = false): Promise<void> {
   if (!appInstance) return;
   if (isFetching) {
     if (queueIfBusy) {
-      pendingRequest = { conversationId };
+      hasPendingRefresh = true;
     }
     return;
   }
@@ -515,14 +481,13 @@ async function requestSnapshot(
   refreshBtn?.setAttribute('aria-busy', 'true');
 
   try {
-    const args: Record<string, unknown> = conversationId ? { conversationId } : {};
     const result = await appInstance.callServerTool({
       name: APP_QUERY_TOOL_NAME,
-      arguments: args,
+      arguments: {},
     });
     const snapshot = extractSnapshot(result.structuredContent);
     // Avoid overwriting the UI with a stale response when a newer user request is queued
-    if (snapshot && pendingRequest === null) {
+    if (snapshot && !hasPendingRefresh) {
       renderSnapshot(snapshot);
     }
   } catch (err) {
@@ -531,10 +496,9 @@ async function requestSnapshot(
     isFetching = false;
     refreshBtn?.removeAttribute('aria-busy');
 
-    if (pendingRequest !== null) {
-      const nextRequest = pendingRequest;
-      pendingRequest = null;
-      void requestSnapshot(nextRequest.conversationId, false);
+    if (hasPendingRefresh) {
+      hasPendingRefresh = false;
+      void requestSnapshot(false);
     }
   }
 }
@@ -543,7 +507,7 @@ function startPolling(): void {
   if (document.hidden || pollTimerId !== null) return;
   pollTimerId = window.setInterval(() => {
     if (!document.hidden) {
-      void requestSnapshot(selectedConversationId, false);
+      void requestSnapshot(false);
     }
   }, POLL_INTERVAL_MS);
 }
@@ -597,7 +561,7 @@ async function bootstrap(): Promise<void> {
   const refreshBtn = document.getElementById('refreshBtn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
-      void requestSnapshot(selectedConversationId, true);
+      void requestSnapshot(true);
     });
   }
 
@@ -639,15 +603,6 @@ async function bootstrap(): Promise<void> {
   }
 
   syncColorPickers();
-
-  const convSelect = document.getElementById('convSelect') as HTMLSelectElement | null;
-  if (convSelect) {
-    convSelect.addEventListener('change', () => {
-      setConfirmBarOpen(false);
-      selectedConversationId = convSelect.value || undefined;
-      void requestSnapshot(selectedConversationId, true);
-    });
-  }
 
   const app = new App({ name: 'Mon-My-Agy', version: '0.1.0' }, {});
   appInstance = app;

@@ -96,15 +96,22 @@ export async function runHookIndexer(rawStdin: string, dataDir?: string): Promis
     const existing = readExistingIndex(indexPath);
 
     const prev = existing.find((c) => c.conversationId === payload.conversationId);
+    const hasUserInput =
+      typeof payload.lastUserInput === 'string' && payload.lastUserInput.trim().length > 0;
+
+    // Ignore background subagent / non-interactive sessions that carry no user input
+    if (!hasUserInput && !prev) {
+      return ok;
+    }
+
     const modelName =
       typeof payload.modelName === 'string' && payload.modelName.trim()
         ? payload.modelName.trim()
         : prev?.modelName ?? 'unknown';
 
-    const title =
-      typeof payload.lastUserInput === 'string' && payload.lastUserInput.trim()
-        ? deriveTitle(payload.lastUserInput, payload.conversationId)
-        : prev?.title ?? payload.conversationId;
+    const title = hasUserInput
+      ? deriveTitle(payload.lastUserInput, payload.conversationId)
+      : prev?.title ?? payload.conversationId;
 
     const updatedEntry: ConversationIndexEntry = {
       conversationId: payload.conversationId,
